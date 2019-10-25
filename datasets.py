@@ -13,6 +13,8 @@ import torchvision.transforms as transforms
 from torchvision.datasets.utils import download_url, check_integrity
 import torch.utils.data as data
 from torch.utils.data import DataLoader
+
+import pdb
          
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
@@ -105,14 +107,14 @@ class ImageFolder(data.Dataset):
   """
 
   def __init__(self, root, transform=None, target_transform=None,
-               loader=default_loader, load_in_mem=False, 
+               loader=default_loader, load_in_mem=False,
                index_filename='imagenet_imgs.npz', **kwargs):
     classes, class_to_idx = find_classes(root)
     # Load pre-computed image directory walk
     if os.path.exists(index_filename):
       print('Loading pre-saved Index file %s...' % index_filename)
       imgs = np.load(index_filename)['imgs']
-    # If first time, walk the folder directory and save the 
+    # If first time, walk the folder directory and save the
     # results to a pre-computed file.
     else:
       print('Generating  Index file %s...' % index_filename)
@@ -190,12 +192,12 @@ class ILSVRC_HDF5(data.Dataset):
     self.num_imgs = len(h5.File(root, 'r')['labels'])
     
     # self.transform = transform
-    self.target_transform = target_transform   
+    self.target_transform = target_transform
     
     # Set the transform here
     self.transform = transform
     
-    # load the entire dataset into memory? 
+    # load the entire dataset into memory?
     self.load_in_mem = load_in_mem
     
     # If loading into memory, do so now
@@ -259,7 +261,7 @@ class CIFAR10(dset.CIFAR10):
       raise RuntimeError('Dataset not found or corrupted.' +
                            ' You can use download=True to download it')
 
-    # now load the picked numpy arrays    
+    # now load the picked numpy arrays
     self.data = []
     self.labels= []
     for fentry in self.train_list:
@@ -282,16 +284,16 @@ class CIFAR10(dset.CIFAR10):
     if self.val_split > 0:
       label_indices = [[] for _ in range(max(self.labels)+1)]
       for i,l in enumerate(self.labels):
-        label_indices[l] += [i]  
+        label_indices[l] += [i]
       label_indices = np.asarray(label_indices)
       
       # randomly grab 500 elements of each class
       np.random.seed(validate_seed)
-      self.val_indices = []           
+      self.val_indices = []
       for l_i in label_indices:
         self.val_indices += list(l_i[np.random.choice(len(l_i), int(len(self.data) * val_split) // (max(self.labels) + 1) ,replace=False)])
     
-    if self.train=='validate':    
+    if self.train=='validate':
       self.data = self.data[self.val_indices]
       self.labels = list(np.asarray(self.labels)[self.val_indices])
       
