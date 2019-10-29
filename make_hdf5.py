@@ -25,8 +25,11 @@ def prepare_parser():
     help='Which Dataset to train on, out of I128, I256, C10, C100;'
          'Append "_hdf5" to use the hdf5 version for ISLVRC (default: %(default)s)')
   parser.add_argument(
-    '--data_root', type=str, default='data',
+    '--data_root', type=str, default='/fs/vulcan-scratch/datasets/imagenet',
     help='Default location where data is stored (default: %(default)s)')
+  parser.add_argument(
+    '--write_dir', type=str, default='/fs/vulcan-scratch/ilyak/locDoc/data/imagenet/',
+    help='Default location where data is written (default: %(default)s)')
   parser.add_argument(
     '--batch_size', type=int, default=256,
     help='Default overall batchsize (default: %(default)s)')
@@ -80,8 +83,9 @@ def run(config):
     # Numpyify y
     y = y.numpy()
     # If we're on the first batch, prepare the hdf5
+    write_name = 'CIFAR10'
     if i==0:
-      with h5.File(config['data_root'] + '/ILSVRC%i.hdf5' % config['image_size'], 'w') as f:
+      with h5.File(config['write_dir'] + '/%s%i.hdf5' % (write_name, config['image_size']), 'w') as f:
         print('Producing dataset of len %d' % len(train_loader.dataset))
         imgs_dset = f.create_dataset('imgs', x.shape,dtype='uint8', maxshape=(len(train_loader.dataset), 3, config['image_size'], config['image_size']),
                                      chunks=(config['chunk_size'], 3, config['image_size'], config['image_size']), compression=config['compression']) 
@@ -92,11 +96,14 @@ def run(config):
         labels_dset[...] = y
     # Else append to the hdf5
     else:
-      with h5.File(config['data_root'] + '/ILSVRC%i.hdf5' % config['image_size'], 'a') as f:
+      with h5.File(config['write_dir'] + '/%s%i.hdf5' % (write_name, config['image_size']), 'a') as f:
         f['imgs'].resize(f['imgs'].shape[0] + x.shape[0], axis=0)
         f['imgs'][-x.shape[0]:] = x
         f['labels'].resize(f['labels'].shape[0] + y.shape[0], axis=0)
         f['labels'][-y.shape[0]:] = y
+    # if i > 100:
+    #     print('Breaking...')
+    #     break
 
 
 def main():

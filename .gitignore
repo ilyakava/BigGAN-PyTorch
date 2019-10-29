@@ -1,1 +1,5 @@
-
+.ipynb_checkpoints/*
+*.npz
+__pycache__/*
+sync_batchnorm/__pycache__/*
+**/.ipynb_checkpoints/*

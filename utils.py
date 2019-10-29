@@ -125,6 +125,9 @@ def prepare_parser():
     '--norm_style', type=str, default='bn',
     help='Normalizer style for G, one of bn [batchnorm], in [instancenorm], '
          'ln [layernorm], gn [groupnorm] (default: %(default)s)')
+  parser.add_argument(
+    '--mh_loss', action='store_true', default=False,
+    help='Multi hinge loss. (default: %(default)s)')
          
   ### Model init stuff ###
   parser.add_argument(
@@ -413,7 +416,7 @@ imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'C10': 32, 'C100': 32}
 root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
              'I64': 'ImageNet', 'I64_hdf5': 'ILSVRC64.hdf5',
-             'I128': 'ImageNet', 'I128_hdf5': 'ILSVRC128.hdf5',
+             'I128': 'train', 'I128_hdf5': 'ILSVRC128.hdf5',
              'I256': 'ImageNet', 'I256_hdf5': 'ILSVRC256.hdf5',
              'C10': 'cifar', 'C100': 'cifar'}
 nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
@@ -912,7 +915,7 @@ def interp(x0, x1, num_midpoints):
   lerp = torch.linspace(0, 1.0, num_midpoints + 2, device='cuda').to(x0.dtype)
   return ((x0 * (1 - lerp.view(1, -1, 1))) + (x1 * lerp.view(1, -1, 1)))
 
-
+#import pdb
 # interp sheet function
 # Supports full, class-wise and intra-class interpolation
 def interp_sheet(G, num_per_sheet, num_midpoints, num_classes, parallel,
@@ -946,6 +949,7 @@ def interp_sheet(G, num_per_sheet, num_midpoints, num_classes, parallel,
   image_filename = '%s/%s/%d/interp%s%d.jpg' % (samples_root, experiment_name,
                                                 folder_number, interp_style,
                                                 sheet_number)
+  #pdb.set_trace()
   torchvision.utils.save_image(out_ims, image_filename,
                                nrow=num_midpoints + 2, normalize=True)
 
