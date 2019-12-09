@@ -31,3 +31,51 @@ def loss_hinge_gen(dis_fake):
 # Default to hinge loss
 generator_loss = loss_hinge_gen
 discriminator_loss = loss_hinge_dis
+
+def crammer_singer_criterion(X, Ylabel):
+  num_real_classes = X.shape[1] - 1
+  mask = torch.ones_like(X)
+  mask.scatter_(1, Ylabel.unsqueeze(-1), 0)
+  wrongs = torch.masked_select(X,mask.byte()).reshape(X.shape[0], num_real_classes)
+  max_wrong, _ = wrongs.max(1)
+  max_wrong = max_wrong.unsqueeze(-1)
+  target = X.gather(1,Ylabel.unsqueeze(-1))
+  return torch.mean(F.relu(1 + max_wrong - target))
+    
+def crammer_singer_complement_criterion(X, Ylabel):
+  num_real_classes = X.shape[1] - 1
+  mask = torch.ones_like(X)
+  mask.scatter_(1, Ylabel.unsqueeze(-1), 0)
+  wrongs = torch.masked_select(X,mask.byte()).reshape(X.shape[0], num_real_classes)
+  max_wrong, _ = wrongs.max(1)
+  max_wrong = max_wrong.unsqueeze(-1)
+  target = X.gather(1,Ylabel.unsqueeze(-1))
+  return torch.mean(F.relu(1 - max_wrong + target))
+  
+def not_fake_criterion(X, Ylabel):
+  wrong = X[:,-1]
+  target = X.gather(1,Ylabel.unsqueeze(-1))
+  return torch.mean(F.relu(1 + wrong - target))
+  
+def linear_wrong(X, Ylabel):
+  wrong = X[:,-1]
+  return torch.mean( wrong )
+
+def linear_right(X, Ylabel):
+  right = X[:,:-1]
+  return -torch.mean( right )
+  
+def linear_target(X, Ylabel):
+  target = X.gather(1,Ylabel.unsqueeze(-1))
+  return torch.mean( -target )
+  
+def weston_watkins_criterion(X, Ylabel):
+  num_real_classes = X.shape[1] - 1
+  mask = torch.ones_like(X)
+  mask.scatter_(1, Ylabel.unsqueeze(-1), 0)
+  wrongs = torch.masked_select(X,mask.byte()).reshape(X.shape[0], num_real_classes)
+  target = X.gather(1,Ylabel.unsqueeze(-1))
+  return torch.mean(F.relu(1 + wrongs - target))
+  #return torch.mean(torch.sum(F.relu(1 + wrongs - target), 1))
+  
+mh_loss = crammer_singer_criterion
