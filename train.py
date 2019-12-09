@@ -66,7 +66,10 @@ def run(config):
 
   # Next, build the model
   G = model.Generator(**config).to(device)
-  D = model.Discriminator(**config).to(device)
+  disc_config = config.copy()
+  if config['mh_csc_loss'] or config['mh_loss']:
+    disc_config['output_dim'] = disc_config['n_classes'] + 1
+  D = model.Discriminator(**disc_config).to(device)
   
    # If using EMA, prepare it
   if config['ema']:
@@ -99,9 +102,13 @@ def run(config):
   # If loading from a pre-trained model, load weights
   if config['resume']:
     print('Loading weights...')
+    name_suffix = config['load_weights'] if config['load_weights'] else None
+    if name_suffix is None and config['name_suffix']:
+      name_suffix = config['name_suffix']
+    
     utils.load_weights(G, D, state_dict,
                        config['weights_root'], experiment_name, 
-                       config['load_weights'] if config['load_weights'] else None,
+                       name_suffix if name_suffix else None,
                        G_ema if config['ema'] else None)
 
   # If parallel, parallelize the GD module
@@ -134,7 +141,8 @@ def run(config):
                                       'start_itr': state_dict['itr']})
 
   # Prepare inception metrics: FID and IS
-  get_inception_metrics = inception_utils.prepare_inception_metrics(config['dataset'], config['parallel'], config['no_fid'])
+  if config['test_every'] > 0:
+    get_inception_metrics = inception_utils.prepare_inception_metrics(config['dataset'], config['parallel'], config['no_fid'])
 
   # Prepare noise and randomly sampled label arrays
   # Allow for different batch sizes in G
@@ -149,8 +157,14 @@ def run(config):
   fixed_y.sample_()
   # Loaders are loaded, prepare the training function
   if config['which_train_fn'] == 'GAN':
-    train = train_fns.GAN_training_function(G, D, GD, z_, y_, 
-                                            ema, state_dict, config)
+    if config['use_unlabeled_data']:
+      print('Using unlabeled data training function...')
+      train = train_fns.GAN_training_function_with_unlabeled(G, D, GD, z_, y_, 
+                                              ema, state_dict, config)
+    else:
+      train = train_fns.GAN_training_function(G, D, GD, z_, y_, 
+                                              ema, state_dict, config)
+  
   # Else, assume debugging and use the dummy train fn
   else:
     train = train_fns.dummy_training_function()
@@ -168,6 +182,8 @@ def run(config):
       pbar = utils.progress(loaders[0],displaytype='s1k' if config['use_multiepoch_sampler'] else 'eta')
     else:
       pbar = tqdm(loaders[0])
+    
+    # If loader says len should be greater than 0, raise number epochs
     for i, (x, y) in enumerate(pbar):
       # Increment the iteration counter
       state_dict['itr'] += 1
@@ -181,7 +197,15 @@ def run(config):
         x, y = x.to(device).half(), y.to(device)
       else:
         x, y = x.to(device), y.to(device)
-      metrics = train(x, y)
+      
+      if config['use_unlabeled_data']:
+        x2, _ = loaders[1].next()
+        x2 = x2.to(device)
+        metrics = train(x, y, x2)
+      else:
+        metrics = train(x, y)
+      
+        
       train_log.log(itr=int(state_dict['itr']), **metrics)
       
       # Every sv_log_interval, log singular values
@@ -204,15 +228,28 @@ def run(config):
             G_ema.eval()
         train_fns.save_and_sample(G, D, G_ema, z_, y_, fixed_z, fixed_y, 
                                   state_dict, config, experiment_name)
+      
+      # Historical saving of weights
+      if not (state_dict['itr'] % config['historical_save_every']):
+        if config['G_eval_mode']:
+          print('Switchin G to eval mode...')
+          G.eval()
+          if config['ema']:
+            G_ema.eval()
+        utils.save_weights(G, D, state_dict, config['weights_root'],
+                     experiment_name,
+                     ('%06d' % state_dict['itr']),
+                     G_ema if config['ema'] else None)
 
-      # Test every specified interval
-      if not (state_dict['itr'] % config['test_every']):
+      # Test every specified interval, skip the zeroth
+      if (config['test_every'] > 0) and (not ((state_dict['itr']+1) % config['test_every'])):
         if config['G_eval_mode']:
           print('Switchin G to eval mode...')
           G.eval()
         train_fns.test(G, D, G_ema, z_, y_, state_dict, config, sample,
                        get_inception_metrics, experiment_name, test_log)
-    # Increment epoch counter at end of epoch
+                       
+      # TODO: classifications live
     state_dict['epoch'] += 1
 
 

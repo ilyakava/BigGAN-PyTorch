@@ -5,6 +5,9 @@ import math
 import numpy as np
 from tqdm import tqdm, trange
 
+import os
+from collections import defaultdict
+
 
 import torch
 import torch.nn as nn
@@ -19,7 +22,10 @@ import inception_utils
 import utils
 import losses
 
+import inception as iscore
+import fid
 
+import pdb
 
 def run(config):
   # Prepare state dict, which holds things like epoch # and itr #
@@ -63,10 +69,42 @@ def run(config):
   G = model.Generator(**config).cuda()
   utils.count_parameters(G)
   
+  # In some cases we need to load D
+  if True or config['get_test_error'] or config['get_train_error'] or config['get_self_error']or config['get_generator_error']:
+    disc_config = config.copy()
+    if config['mh_csc_loss'] or config['mh_loss']:
+      disc_config['output_dim'] = disc_config['n_classes'] + 1
+    D = model.Discriminator(**disc_config).to(device)
+    
+    def get_n_correct_from_D(x, y):
+      """Gets the "classifications" from D.
+      
+      y: the correct labels
+      
+      In the case of projection discrimination we have to pass in all the labels
+      as conditionings to get the class specific affinity.
+      """
+      x = x.to(device)
+      if config['model'] == 'BigGAN': # projection discrimination case
+        if not config['get_self_error']:
+          y = y.to(device)
+        yhat = D(x,y)
+        for i in range(1,config['n_classes']):
+          yhat_ = D(x,((y+i) % config['n_classes']))
+          yhat = torch.cat([yhat,yhat_],1)
+        preds_ = yhat.data.max(1)[1].cpu()
+        return preds_.eq(0).cpu().sum()
+      else: # the mh gan case
+        if not config['get_self_error']:
+          y = y.to(device)
+        yhat = D(x)
+        preds_ = yhat[:,:config['n_classes']].data.max(1)[1]
+        return preds_.eq(y.data).cpu().sum()
+  
   # Load weights
   print('Loading weights...')
   # Here is where we deal with the ema--load ema weights or load normal weights
-  utils.load_weights(G if not (config['use_ema']) else None, None, state_dict, 
+  utils.load_weights(G if not (config['use_ema']) else None, D, state_dict, 
                      config['weights_root'], experiment_name, config['load_weights'],
                      G if config['ema'] and config['use_ema'] else None,
                      strict=False, load_optim=False)
@@ -81,9 +119,134 @@ def run(config):
     G.eval()
   else:
     print('G is in %s mode...' % ('training' if G.training else 'eval'))
-    
-  #Sample function
+  
   sample = functools.partial(utils.sample, G=G, z_=z_, y_=y_, config=config)  
+  brief_expt_name = config['experiment_name'][-30:]
+  
+  # load results dict always
+  HIST_FNAME = 'scoring_hist.npy'
+  def load_or_make_hist(d):
+    """make/load history files in each
+    """
+    if not os.path.isdir(d):
+      raise Exception('%s is not a valid directory' % d)
+    f = os.path.join(d, HIST_FNAME)
+    if os.path.isfile(f):
+      return np.load(f, allow_pickle=True).item()
+    else:
+      return defaultdict(dict)
+  hist_dir = os.path.join(config['weights_root'], config['experiment_name'])
+  hist = load_or_make_hist(hist_dir)
+    
+  if config['get_test_error'] or config['get_train_error']:
+    loaders = utils.get_data_loaders(**{**config, 'batch_size': config['batch_size'],
+                                      'start_itr': state_dict['itr'], 'use_test_set': config['get_test_error']})
+    acc_type = 'Test' if config['get_test_error'] else 'Train'
+    
+    
+    pbar = tqdm(loaders[0])
+    loader_total = len(loaders[0]) * config['batch_size']
+    sample_todo = min(config['sample_num_error'],loader_total)
+    print('Getting %s error accross %i examples' % (acc_type,sample_todo))
+    correct = 0
+    total = 0
+    
+    with torch.no_grad():
+      for i, (x, y) in enumerate(pbar):
+        correct += get_n_correct_from_D(x,y)
+        total += config['batch_size']
+        if loader_total > total and total >= config['sample_num_error']:
+          print('Quitting early...')
+          break
+
+    accuracy = float(correct) / float(total) 
+    hist = load_or_make_hist(hist_dir)
+    hist[state_dict['itr']][acc_type] = accuracy
+    np.save(os.path.join(hist_dir, HIST_FNAME), hist)
+    
+    print('[%s][%06d] %s accuracy: %f.' % (brief_expt_name, state_dict['itr'], acc_type, accuracy * 100))
+
+  if config['get_self_error']:
+    n_used_imgs = config['sample_num_error']
+    correct = 0
+    imageSize = config['resolution']
+    x = np.empty((n_used_imgs,imageSize,imageSize,3), dtype=np.uint8)
+    for l in  tqdm(range(n_used_imgs // G_batch_size), desc='Generating [%s][%06d]' % (brief_expt_name, state_dict['itr'])):
+      with torch.no_grad():
+        images, y = sample()
+        correct += get_n_correct_from_D(images,y)
+        
+    accuracy = float(correct) / float(n_used_imgs) 
+    print('[%s][%06d] %s accuracy: %f.' % (brief_expt_name, state_dict['itr'], 'Self', accuracy * 100))
+    hist = load_or_make_hist(hist_dir)
+    hist[state_dict['itr']]['Self'] = accuracy
+    np.save(os.path.join(hist_dir, HIST_FNAME), hist)
+    
+  if config['get_generator_error']:
+    
+    if config['dataset'] == 'C10':
+      from classification.models.densenet import DenseNet121
+      from torchvision import transforms
+      compnet = DenseNet121()
+      compnet = torch.nn.DataParallel(compnet)
+      #checkpoint = torch.load(os.path.join('/scratch0/ilya/locDoc/classifiers/densenet121','ckpt_47.t7'))
+      checkpoint = torch.load(os.path.join('/fs/vulcan-scratch/ilyak/locDoc/experiments/classifiers/cifar/densenet121','ckpt_47.t7'))
+      compnet.load_state_dict(checkpoint['net'])
+      compnet = compnet.to(device)
+      compnet.eval();
+      minimal_trans = transforms.Compose([ transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)), ])
+    elif config['dataset'] == 'C100':
+      from classification.models.densenet import DenseNet121
+      from torchvision import transforms
+      compnet = DenseNet121(num_classes=100)
+      compnet = torch.nn.DataParallel(compnet)
+      checkpoint = torch.load(os.path.join('/scratch0/ilya/locDoc/classifiers/cifar100/densenet121','ckpt.copy.t7'))
+      #checkpoint = torch.load(os.path.join('/fs/vulcan-scratch/ilyak/locDoc/experiments/classifiers/cifar100/densenet121','ckpt.copy.t7'))
+      compnet.load_state_dict(checkpoint['net'])
+      compnet = compnet.to(device)
+      compnet.eval();
+      minimal_trans = transforms.Compose([ transforms.ToTensor(), transforms.Normalize((0.507, 0.487, 0.441), (0.267, 0.256, 0.276)), ])
+    elif config['dataset'] == 'STL48':
+      from classification.models.wideresnet import WideResNet48
+      from torchvision import transforms
+      checkpoint = torch.load(os.path.join('/fs/vulcan-scratch/ilyak/locDoc/experiments/classifiers/stl/mixmatch_48','model_best.pth.tar'))
+      compnet = WideResNet48(num_classes=10)
+      compnet = compnet.to(device)
+      for param in compnet.parameters():
+          param.detach_()
+      compnet.load_state_dict(checkpoint['ema_state_dict'])
+      compnet.eval()
+      minimal_trans = transforms.Compose([ transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)), ])
+    else:
+      raise ValueError('Dataset %s has no comparison network.' % config['dataset'])
+    
+    n_used_imgs = 10000
+    correct = 0
+    mean_label = np.zeros(config['n_classes'])
+    imageSize = config['resolution']
+    x = np.empty((n_used_imgs,imageSize,imageSize,3), dtype=np.uint8)
+    for l in  tqdm(range(n_used_imgs // G_batch_size), desc='Generating [%s][%06d]' % (brief_expt_name, state_dict['itr'])):
+      with torch.no_grad():
+        images, y = sample()
+        fake = images.data.cpu().numpy()
+        fake = np.floor((fake + 1) * 255/2.0).astype(np.uint8)
+        fake_input = np.zeros(fake.shape)
+        for bi in range(fake.shape[0]):
+          fake_input[bi] = minimal_trans(np.moveaxis(fake[bi],0,-1))
+        images.data.copy_(torch.from_numpy(fake_input));
+        lab = compnet(images).max(1)[1]
+        mean_label +=np.bincount(lab.data.cpu(),minlength=config['n_classes'])
+        correct += int((lab == y).sum().cpu())
+        
+    accuracy = float(correct) / float(n_used_imgs) 
+    mean_label_normalized = mean_label / float(n_used_imgs)
+    
+    print('[%s][%06d] %s accuracy: %f.' % (brief_expt_name, state_dict['itr'], 'Generator', accuracy * 100))
+    hist = load_or_make_hist(hist_dir)
+    hist[state_dict['itr']]['Generator'] = accuracy
+    hist[state_dict['itr']]['Mean_Label'] = mean_label_normalized
+    np.save(os.path.join(hist_dir, HIST_FNAME), hist)
+    
   if config['accumulate_stats']:
     print('Accumulating standing stats across %d accumulations...' % config['num_standing_accumulations'])
     utils.accumulate_standing_stats(G, z_, y_, config['n_classes'],
@@ -107,26 +270,101 @@ def run(config):
     print('Saving npz to %s...' % npz_filename)
     np.savez(npz_filename, **{'x' : x, 'y' : y})
   
+  
+  if config['official_FID']:
+    f = np.load(config['dataset_is_fid'])
+    # this is for using the downloaded one from
+    # https://github.com/bioinf-jku/TTUR
+    #mdata, sdata = f['mu'][:], f['sigma'][:]
+    
+    # this one is for my format files
+    mdata, sdata = f['mfid'], f['sfid']
+
+  # Sample a number of images and stick them in memory, for use with TF-Inception official_IS and official_FID
+  data_gen_necessary = False
+  if config['sample_np_mem']:
+    is_saved = int('IS' in hist[state_dict['itr']])
+    is_todo = int(config['official_IS'])
+    fid_saved = int('FID' in hist[state_dict['itr']])
+    fid_todo = int(config['official_FID'])
+    data_gen_necessary = config['overwrite'] or (is_todo > is_saved) or (fid_todo > fid_saved)
+  if config['sample_np_mem'] and data_gen_necessary:
+    n_used_imgs = 50000
+    imageSize = config['resolution']
+    x = np.empty((n_used_imgs,imageSize,imageSize,3), dtype=np.uint8)
+    for l in  tqdm(range(n_used_imgs // G_batch_size), desc='Generating [%s][%06d]' % (brief_expt_name, state_dict['itr'])):
+      start = l * G_batch_size
+      end = start + G_batch_size
+      
+      with torch.no_grad():
+        images, labels = sample()
+      fake = np.uint8(255 * (images.cpu().numpy() + 1) / 2.)
+      x[start:end] = np.moveaxis(fake,1,-1)
+      #y += [labels.cpu().numpy()]
+
+  
+  if config['official_IS']:
+    if (not ('IS' in hist[state_dict['itr']])) or config['overwrite']:
+      mis, sis = iscore.get_inception_score(x)
+      print('[%s][%06d] IS mu: %f. IS sigma: %f.' % (brief_expt_name, state_dict['itr'], mis, sis))
+      hist = load_or_make_hist(hist_dir)
+      hist[state_dict['itr']]['IS'] = [mis, sis]
+      np.save(os.path.join(hist_dir, HIST_FNAME), hist)
+    else:
+      mis, sis = hist[state_dict['itr']]['IS']
+      print('[%s][%06d] Already done (skipping...): IS mu: %f. IS sigma: %f.' % (brief_expt_name, state_dict['itr'], mis, sis))
+      
+  
+  if config['official_FID']:
+    import tensorflow as tf
+    def fid_ms_for_imgs(images, mem_fraction=0.5):
+      gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=mem_fraction)
+      inception_path = fid.check_or_download_inception(None)
+      fid.create_inception_graph(inception_path)  # load the graph into the current TF graph
+      with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+        sess.run(tf.global_variables_initializer())
+        mu_gen, sigma_gen = fid.calculate_activation_statistics(images, sess, batch_size=100)
+      return mu_gen, sigma_gen
+    if (not ('FID' in hist[state_dict['itr']])) or config['overwrite']: 
+      m1, s1 = fid_ms_for_imgs(x)
+      fid_value = fid.calculate_frechet_distance(m1, s1, mdata, sdata)
+      print('[%s][%06d] FID: %f' % (brief_expt_name, state_dict['itr'], fid_value))
+      hist = load_or_make_hist(hist_dir)
+      hist[state_dict['itr']]['FID'] = fid_value
+      np.save(os.path.join(hist_dir, HIST_FNAME), hist)
+    else:
+      fid_value = hist[state_dict['itr']]['FID']
+      print('[%s][%06d] Already done (skipping...): FID: %f' % (brief_expt_name, state_dict['itr'], fid_value))
+      
+        
+      
+  
   # Prepare sample sheets
   if config['sample_sheets']:
     print('Preparing conditional sample sheets...')
+    folder_number=config['sample_sheet_folder_num']
+    if folder_number == -1:
+      folder_number = config['load_weights']
     utils.sample_sheet(G, classes_per_sheet=utils.classes_per_sheet_dict[config['dataset']], 
                          num_classes=config['n_classes'], 
                          samples_per_class=10, parallel=config['parallel'],
                          samples_root=config['samples_root'], 
                          experiment_name=experiment_name,
-                         folder_number=config['sample_sheet_folder_num'],
+                         folder_number=folder_number,
                          z_=z_,)
   # Sample interp sheets
   if config['sample_interps']:
     print('Preparing interp sheets...')
+    folder_number=config['sample_sheet_folder_num']
+    if folder_number == -1:
+      folder_number = config['load_weights']
     for fix_z, fix_y in zip([False, False, True], [False, True, False]):
       utils.interp_sheet(G, num_per_sheet=16, num_midpoints=8,
                          num_classes=config['n_classes'], 
                          parallel=config['parallel'], 
                          samples_root=config['samples_root'], 
                          experiment_name=experiment_name,
-                         folder_number=config['sample_sheet_folder_num'], 
+                         folder_number=int(folder_number), 
                          sheet_number=0,
                          fix_z=fix_z, fix_y=fix_y, device='cuda')
   # Sample random sheet
@@ -134,14 +372,15 @@ def run(config):
     print('Preparing random sample sheet...')
     images, labels = sample()    
     torchvision.utils.save_image(images.float(),
-                                 '%s/%s/random_samples.jpg' % (config['samples_root'], experiment_name),
+                                 '%s/%s/%s.jpg' % (config['samples_root'], experiment_name, config['load_weights']),
                                  nrow=int(G_batch_size**0.5),
                                  normalize=True)
 
-  # Get Inception Score and FID
-  get_inception_metrics = inception_utils.prepare_inception_metrics(config['dataset'], config['parallel'], config['no_fid'])
+  
   # Prepare a simple function get metrics that we use for trunc curves
   def get_metrics():
+    # Get Inception Score and FID
+    get_inception_metrics = inception_utils.prepare_inception_metrics(config['dataset'], config['parallel'], config['no_fid'])
     sample = functools.partial(utils.sample, G=G, z_=z_, y_=y_, config=config)    
     IS_mean, IS_std, FID = get_inception_metrics(sample, config['num_inception_images'], num_splits=10, prints=False)
     # Prepare output string
@@ -171,13 +410,23 @@ def run(config):
         utils.accumulate_standing_stats(G, z_, y_, config['n_classes'],
                                     config['num_standing_accumulations'])
       get_metrics()
+  
+  
+  
+      
 def main():
   # parse command line and run    
   parser = utils.prepare_parser()
   parser = utils.add_sample_parser(parser)
   config = vars(parser.parse_args())
   print(config)
-  run(config)
+  if config['sample_multiple']:
+    suffixes = config['load_weights'].split(',')
+    for suffix in suffixes:
+      config['load_weights'] = suffix
+      run(config)
+  else:
+    run(config)
   
 if __name__ == '__main__':    
   main()

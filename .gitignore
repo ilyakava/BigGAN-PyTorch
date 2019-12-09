@@ -4,3 +4,4 @@ __pycache__/*
 sync_batchnorm/__pycache__/*
 **/.ipynb_checkpoints/*
 scripts/*
+*.pyc

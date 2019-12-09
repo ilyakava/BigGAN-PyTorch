@@ -1,6 +1,7 @@
 ''' Datasets
     This file contains definitions for our CIFAR, ImageFolder, and HDF5 datasets
 '''
+import csv
 import os
 import os.path
 import sys
@@ -37,8 +38,7 @@ def find_classes(dir):
     classes.sort()
     class_to_idx = {classes[i]: i for i in range(len(classes))}
     return classes, class_to_idx
-
-
+    
 def make_dataset(dir, class_to_idx):
   images = []
   dir = os.path.expanduser(dir)
@@ -80,7 +80,6 @@ def default_loader(path):
   else:
     return pil_loader(path)
 
-
 class ImageFolder(data.Dataset):
   """A generic data loader where the images are arranged in this way: ::
 
@@ -107,14 +106,14 @@ class ImageFolder(data.Dataset):
   """
 
   def __init__(self, root, transform=None, target_transform=None,
-               loader=default_loader, load_in_mem=False,
+               loader=default_loader, load_in_mem=False, 
                index_filename='imagenet_imgs.npz', **kwargs):
     classes, class_to_idx = find_classes(root)
     # Load pre-computed image directory walk
     if os.path.exists(index_filename):
       print('Loading pre-saved Index file %s...' % index_filename)
       imgs = np.load(index_filename)['imgs']
-    # If first time, walk the folder directory and save the
+    # If first time, walk the folder directory and save the 
     # results to a pre-computed file.
     else:
       print('Generating  Index file %s...' % index_filename)
@@ -178,7 +177,6 @@ class ImageFolder(data.Dataset):
     fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
     return fmt_str
         
-
 ''' ILSVRC_HDF5: A dataset to support I/O from an HDF5 to avoid
     having to load individual images all the time. '''
 import h5py as h5
@@ -192,12 +190,12 @@ class ILSVRC_HDF5(data.Dataset):
     self.num_imgs = len(h5.File(root, 'r')['labels'])
     
     # self.transform = transform
-    self.target_transform = target_transform
+    self.target_transform = target_transform   
     
     # Set the transform here
     self.transform = transform
     
-    # load the entire dataset into memory?
+    # load the entire dataset into memory? 
     self.load_in_mem = load_in_mem
     
     # If loading into memory, do so now
@@ -261,7 +259,7 @@ class CIFAR10(dset.CIFAR10):
       raise RuntimeError('Dataset not found or corrupted.' +
                            ' You can use download=True to download it')
 
-    # now load the picked numpy arrays
+    # now load the picked numpy arrays    
     self.data = []
     self.labels= []
     for fentry in self.train_list:
@@ -284,16 +282,16 @@ class CIFAR10(dset.CIFAR10):
     if self.val_split > 0:
       label_indices = [[] for _ in range(max(self.labels)+1)]
       for i,l in enumerate(self.labels):
-        label_indices[l] += [i]
+        label_indices[l] += [i]  
       label_indices = np.asarray(label_indices)
       
       # randomly grab 500 elements of each class
       np.random.seed(validate_seed)
-      self.val_indices = []
+      self.val_indices = []           
       for l_i in label_indices:
         self.val_indices += list(l_i[np.random.choice(len(l_i), int(len(self.data) * val_split) // (max(self.labels) + 1) ,replace=False)])
     
-    if self.train=='validate':
+    if self.train=='validate':    
       self.data = self.data[self.val_indices]
       self.labels = list(np.asarray(self.labels)[self.val_indices])
       
@@ -362,3 +360,21 @@ class CIFAR100(CIFAR10):
     test_list = [
         ['test', 'f0ef6b0ae62326f3e7ffdfab6717acfc'],
     ]
+    
+class STL10(dset.STL10):
+    """
+    In the future could load unlabeled data in some special way too.
+    """
+    def __init__(self, root, train=True, unlabeled=True,
+           transform=None, target_transform=None,
+           download=True, validate_seed=0,
+           val_split=0, load_in_mem=True, **kwargs):
+      if train:
+        super(STL10, self).__init__(root, transform=transform, download=download,
+                                      target_transform=target_transform)
+      elif unlabeled:
+        super(STL10, self).__init__(root, split='unlabeled', transform=transform,
+                                      target_transform=target_transform)
+      else:
+        super(STL10, self).__init__(root, split='test', transform=transform,
+                                      target_transform=target_transform)

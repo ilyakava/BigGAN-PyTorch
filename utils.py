@@ -126,8 +126,34 @@ def prepare_parser():
     help='Normalizer style for G, one of bn [batchnorm], in [instancenorm], '
          'ln [layernorm], gn [groupnorm] (default: %(default)s)')
   parser.add_argument(
-    '--mh_loss', action='store_true', default=False,
+    '--mh_csc_loss', action='store_true', default=False,
     help='Multi hinge loss. (default: %(default)s)')
+  parser.add_argument(
+    '--resampling', action='store_true', default=False,
+    help='For the generator step immediately following the discriminator step resample the noise. (default: %(default)s)')
+  parser.add_argument(
+    '--mh_loss', action='store_true', default=False,
+    help='The multi-hinge loss with class agnostic and class specific update. (default: %(default)s)')
+  parser.add_argument(
+    '--use_unlabeled_data', action='store_true', default=False,
+    help='For STL, use unlabeled data. (default: %(default)s)')
+  parser.add_argument(
+    '--bottom_width', type=int, default=4,
+    help='Set this for image sizes not powers of 2. Usefule for STL at 48x48: %(default)s)')
+  parser.add_argument(
+    '--ignore_projection_discriminator', action='store_true', default=False,
+    help='Use this for STL baseline experiments. (default: %(default)s)')
+  parser.add_argument(
+    '--fm_loss', action='store_true', default=False,
+    help='Read as fm_loss ONLY. Feature matching loss for unlabeled portion of data on G step. (default: %(default)s)')
+  parser.add_argument(
+    '--mh_loss_weight', type=float, default=0.05,
+    help='The weight for the class specific part of the multi hinge loss. Best weight for C100: %(default)s)')   
+  parser.add_argument(
+    '--mh_fmloss_weight', type=float, default=1.0,
+    help='The weight for the class agnostic feature matching part of the multi hinge loss. Best weight for C100: %(default)s)')   
+    
+    
          
   ### Model init stuff ###
   parser.add_argument(
@@ -187,8 +213,8 @@ def prepare_parser():
     '--split_D', action='store_true', default=False,
     help='Run D twice rather than concatenating inputs? (default: %(default)s)')
   parser.add_argument(
-    '--num_epochs', type=int, default=100,
-    help='Number of epochs to train for (default: %(default)s)')
+    '--num_epochs', type=int, default=500,
+    help='Number of epochs to train for (default: %(default)s). Related to memory, setting to 1e12 blows up memory...')
   parser.add_argument(
     '--parallel', action='store_true', default=False,
     help='Train with multiple GPUs (default: %(default)s)')
@@ -237,7 +263,7 @@ def prepare_parser():
     help='Calculate IS only, not FID? (default: %(default)s)')
   parser.add_argument(
     '--test_every', type=int, default=5000,
-    help='Test every X iterations (default: %(default)s)')
+    help='Test every X iterations. Set to -1 to skip testing. (default: %(default)s)')
   parser.add_argument(
     '--num_inception_images', type=int, default=50000,
     help='Number of samples to compute inception metrics with '
@@ -278,6 +304,10 @@ def prepare_parser():
     '--config_from_name', action='store_true', default=False,
     help='Use a hash of the experiment name instead of the full config '
          '(default: %(default)s)')
+  parser.add_argument(
+    '--historical_save_every', type=int, default=1e9,
+    help='Save a non-overwritten version every X iterations (default: %(default)s)')
+         
          
   ### EMA Stuff ###
   parser.add_argument(
@@ -401,35 +431,80 @@ def add_sample_parser(parser):
   parser.add_argument(
     '--sample_inception_metrics', action='store_true', default=False,
     help='Calculate Inception metrics with sample.py? (default: %(default)s)')  
+  parser.add_argument(
+    '--sample_np_mem', action='store_true', default=False,
+    help='Sample the GAN and stick it in memory. (default: %(default)s)')
+  parser.add_argument(
+    '--official_IS', action='store_true', default=False,
+    help='Run the official inception score code. (default: %(default)s)')
+  parser.add_argument(
+    '--official_FID', action='store_true', default=False,
+    help='Run the official frechet inception distance code. (default: %(default)s)')
+  parser.add_argument(
+    '--overwrite', action='store_true', default=False,
+    help='Force recompute IS|FID scores (default: %(default)s)')
+  parser.add_argument(
+    '--dataset_is_fid', type=str, default='',
+    help='Full path to the file that contains the FID moments for the dataset. (default: %(default)s)')
+  parser.add_argument(
+    '--sample_multiple', action='store_true', default=False,
+    help='When true the load_weights argument is assumed to be a comma separated string of multiple saved model names, so sampling will be run for each entry (default: %(default)s)')
+  parser.add_argument(
+    '--get_test_error', action='store_true', default=False,
+    help='Load the test set for the dataset and see the classifier/discriminator error. (default: %(default)s)')
+  parser.add_argument(
+    '--get_train_error', action='store_true', default=False,
+    help='Load the train set for the dataset and see the classifier/discriminator error. (default: %(default)s)')
+  parser.add_argument(
+    '--get_self_error', action='store_true', default=False,
+    help='See the classifier/discriminator error on generated images where the conditional y is the ground truth. (default: %(default)s)')
+  parser.add_argument(
+    '--get_generator_error', action='store_true', default=False,
+    help='Use an auxiliary pre-trained classifier network to classify the generated images from the model and record accuracy with the conditional y as the ground truth. (default: %(default)s)')
+  parser.add_argument(
+    '--sample_num_error', type=int, default=10000,
+    help='Number of images to sample when sampling train/test/self/generator error '
+         '(default: %(default)s)')
   return parser
 
 # Convenience dicts
-dset_dict = {'I32': dset.ImageFolder, 'I64': dset.ImageFolder, 
+dset_dict = {'I32': dset.ImageFolder, 'I64': dset.ImageFolder,
+             'TI64': dset.ImageFolder,'TI64_hdf5': dset.ILSVRC_HDF5, 
              'I128': dset.ImageFolder, 'I256': dset.ImageFolder,
              'I32_hdf5': dset.ILSVRC_HDF5, 'I64_hdf5': dset.ILSVRC_HDF5, 
              'I128_hdf5': dset.ILSVRC_HDF5, 'I256_hdf5': dset.ILSVRC_HDF5,
-             'C10': dset.CIFAR10, 'C100': dset.CIFAR100}
+             'C10': dset.CIFAR10, 'C100': dset.CIFAR100,
+            'STL64': dset.STL10, 'STL32': dset.STL10, 'STL48': dset.STL10, 'STL96': dset.STL10,
+}
 imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'I64': 64, 'I64_hdf5': 64,
+               'TI64': 64, 'TI64_hdf5': 64,
                'I128': 128, 'I128_hdf5': 128,
                'I256': 256, 'I256_hdf5': 256,
-               'C10': 32, 'C100': 32}
+               'C10': 32, 'C100': 32, 'STL64': 64, 'STL32': 32, 'STL48': 48, 'STL96': 96,
+}
 root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
-             'I64': 'ImageNet', 'I64_hdf5': 'ILSVRC64.hdf5',
+             'I64': 'train', 'I64_hdf5': 'ILSVRC64.hdf5',
+             'TI64': 'train', 'TI64_hdf5': 'TILSVRC64.hdf5',
              'I128': 'train', 'I128_hdf5': 'ILSVRC128.hdf5',
              'I256': 'ImageNet', 'I256_hdf5': 'ILSVRC256.hdf5',
-             'C10': 'cifar', 'C100': 'cifar'}
+             'C10': 'cifar', 'C100': 'cifar', 'STL64': 'stl10', 'STL32': 'stl10', 'STL48': 'stl10', 'STL96': 'stl10',
+}
 nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
                'I64': 1000, 'I64_hdf5': 1000,
+               'TI64': 200, 'TI64_hdf5': 200,
                'I128': 1000, 'I128_hdf5': 1000,
                'I256': 1000, 'I256_hdf5': 1000,
-               'C10': 10, 'C100': 100}
+               'C10': 10, 'C100': 100, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
+}
 # Number of classes to put per sample sheet               
 classes_per_sheet_dict = {'I32': 50, 'I32_hdf5': 50,
                           'I64': 50, 'I64_hdf5': 50,
+                          'TI64': 50, 'TI64_hdf5': 50,
                           'I128': 20, 'I128_hdf5': 20,
                           'I256': 20, 'I256_hdf5': 20,
-                          'C10': 10, 'C100': 100}
+                          'C10': 10, 'C100': 25, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
+}
 activation_dict = {'inplace_relu': nn.ReLU(inplace=True),
                    'relu': nn.ReLU(inplace=False),
                    'ir': nn.ReLU(inplace=True),}
@@ -467,13 +542,14 @@ class RandomCropLongEdge(object):
     Returns:
         PIL Image: Cropped image.
     """
+    # height, width
     size = (min(img.size), min(img.size))
     # Only step forward along this edge if it's the long edge
-    i = (0 if size[0] == img.size[0] 
+    top = (0 if size[0] == img.size[0] 
           else np.random.randint(low=0,high=img.size[0] - size[0]))
-    j = (0 if size[1] == img.size[1]
+    left = (0 if size[1] == img.size[1]
           else np.random.randint(low=0,high=img.size[1] - size[1]))
-    return transforms.functional.crop(img, i, j, size[0], size[1])
+    return transforms.functional.crop(img, top, left, size[0], size[1])
 
   def __repr__(self):
     return self.__class__.__name__
@@ -527,7 +603,8 @@ class MultiEpochSampler(torch.utils.data.Sampler):
 def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64, 
                      num_workers=8, shuffle=True, load_in_mem=False, hdf5=False,
                      pin_memory=True, drop_last=True, start_itr=0,
-                     num_epochs=500, use_multiepoch_sampler=False,
+                     num_epochs=500, use_multiepoch_sampler=False, use_unlabeled_data=False,
+                     use_test_set=False,
                      **kwargs):
 
   # Append /FILENAME.hdf5 to root if using hdf5
@@ -541,6 +618,12 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
   # For image folder datasets, name of the file where we store the precomputed
   # image locations to avoid having to walk the dirs every time we load.
   dataset_kwargs = {'index_filename': '%s_imgs.npz' % dataset}
+  if use_test_set:
+    if dataset in ['C10', 'C100']:
+      dataset_kwargs['train'] = False
+    if dataset in ['STL64', 'STL32', 'STL48']:
+      dataset_kwargs['train'] = False
+      dataset_kwargs['unlabeled'] = False
   
   # HDF5 datasets have their own inbuilt transform, no need to train_transform  
   if 'hdf5' in dataset:
@@ -550,6 +633,13 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
       print('Data will be augmented...')
       if dataset in ['C10', 'C100']:
         train_transform = [transforms.RandomCrop(32, padding=4),
+                           transforms.RandomHorizontalFlip()]
+      elif dataset in ['STL96']:
+        train_transform = [transforms.RandomCrop(96, padding=4),
+                           transforms.RandomHorizontalFlip()]
+      elif dataset in ['STL64', 'STL32', 'STL48']:
+        train_transform = [transforms.RandomCrop(90),
+                           transforms.Resize(image_size),
                            transforms.RandomHorizontalFlip()]
       else:
         train_transform = [RandomCropLongEdge(),
@@ -573,7 +663,7 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
   loaders = []   
   if use_multiepoch_sampler:
     print('Using multiepoch sampler from start_itr %d...' % start_itr)
-    loader_kwargs = {'num_workers': num_workers, 'pin_memory': pin_memory}
+    loader_kwargs = {'num_workers': num_workers, 'pin_memory': pin_memory, 'drop_last': drop_last}
     sampler = MultiEpochSampler(train_set, num_epochs, start_itr, batch_size)
     train_loader = DataLoader(train_set, batch_size=batch_size,
                               sampler=sampler, **loader_kwargs)
@@ -583,6 +673,39 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
     train_loader = DataLoader(train_set, batch_size=batch_size,
                               shuffle=shuffle, **loader_kwargs)
   loaders.append(train_loader)
+  if (dataset in ['STL64', 'STL32', 'STL48', 'STL96']) and use_unlabeled_data:
+    loader_kwargs = {'num_workers': num_workers, 'pin_memory': pin_memory, 'drop_last': drop_last}
+    # MultiEpochSampler here will lead to memory use blowing up
+    #sampler = MultiEpochSampler(train_set, num_epochs, start_itr, batch_size)
+    class MyLiteDataLoader(object):
+
+      def __init__(self, raw_loader, batch_size):
+          self.unlimit_gen = self.generator(True)
+          self.raw_loader = raw_loader
+          self.bs = batch_size
+      
+      def generator(self, inf=False):
+          while True:
+              theloader = DataLoader(self.raw_loader, batch_size=self.bs, shuffle=True, **loader_kwargs)
+              for xy in theloader:
+                  x, y = xy
+                  yield x, y
+              if not inf: break
+  
+      def next(self):
+          return next(self.unlimit_gen)
+  
+      def get_iter(self):
+          return self.generator()
+  
+      def __len__(self):
+          return len(self.raw_loader)
+        
+    unl_set = which_dataset(root=data_root, transform=train_transform,
+                            load_in_mem=load_in_mem, train=False, **dataset_kwargs)
+    unl_loader = MyLiteDataLoader(unl_set, batch_size)
+    loaders.append(unl_loader)
+    
   return loaders
 
 
@@ -879,6 +1002,7 @@ def sample(G, z_, y_, config):
 # Sample function for sample sheets
 def sample_sheet(G, classes_per_sheet, num_classes, samples_per_class, parallel,
                  samples_root, experiment_name, folder_number, z_=None):
+  folder_number = int(folder_number)
   # Prepare sample directory
   if not os.path.isdir('%s/%s' % (samples_root, experiment_name)):
     os.mkdir('%s/%s' % (samples_root, experiment_name))
@@ -915,7 +1039,6 @@ def interp(x0, x1, num_midpoints):
   lerp = torch.linspace(0, 1.0, num_midpoints + 2, device='cuda').to(x0.dtype)
   return ((x0 * (1 - lerp.view(1, -1, 1))) + (x1 * lerp.view(1, -1, 1)))
 
-#import pdb
 # interp sheet function
 # Supports full, class-wise and intra-class interpolation
 def interp_sheet(G, num_per_sheet, num_midpoints, num_classes, parallel,
@@ -949,9 +1072,9 @@ def interp_sheet(G, num_per_sheet, num_midpoints, num_classes, parallel,
   image_filename = '%s/%s/%d/interp%s%d.jpg' % (samples_root, experiment_name,
                                                 folder_number, interp_style,
                                                 sheet_number)
-  #pdb.set_trace()
-  torchvision.utils.save_image(out_ims, image_filename,
-                               nrow=num_midpoints + 2, normalize=True)
+  if G.fp16:
+    out_ims = out_ims.type(torch.float)
+  torchvision.utils.save_image(out_ims, image_filename, nrow=num_midpoints + 2, normalize=True)
 
 
 # Convenience debugging function to print out gradnorms and shape from each layer

@@ -36,6 +36,7 @@ def G_arch(ch=64, attention='64', ksize='333333', dilation='111111'):
                'resolution' : [8, 16, 32, 64, 128],
                'attention' : {2**i: (2**i in [int(item) for item in attention.split('_')])
                               for i in range(3,8)}}
+  # 96 like 128
   arch[96]  = {'in_channels' :  [ch * item for item in [16, 16, 8, 4, 2]],
                'out_channels' : [ch * item for item in [16, 8, 4, 2, 1]],
                'upsample' : [True] * 5,
@@ -306,6 +307,7 @@ def D_arch(ch=64, attention='64',ksize='333333', dilation='111111'):
                               for i in range(2,6)}}
   return arch
 
+import pdb
 class Discriminator(nn.Module):
 
   def __init__(self, D_ch=64, D_wide=True, resolution=128,
@@ -313,7 +315,7 @@ class Discriminator(nn.Module):
                num_D_SVs=1, num_D_SV_itrs=1, D_activation=nn.ReLU(inplace=False),
                D_lr=2e-4, D_B1=0.0, D_B2=0.999, adam_eps=1e-8,
                SN_eps=1e-12, output_dim=1, D_mixed_precision=False, D_fp16=False,
-               D_init='ortho', skip_init=False, D_param='SN', ignore_projection_discriminator=False, **kwargs):
+               D_init='ortho', skip_init=False, D_param='SN', **kwargs):
     super(Discriminator, self).__init__()
     # Width multiplier
     self.ch = D_ch
@@ -339,7 +341,6 @@ class Discriminator(nn.Module):
     self.fp16 = D_fp16
     # Architecture
     self.arch = D_arch(self.ch, self.attention)[resolution]
-    self.ignore_projection_discriminator = ignore_projection_discriminator
 
     # Which convs, batchnorms, and linear layers to use
     # No option to turn off SN in D right now
@@ -375,9 +376,19 @@ class Discriminator(nn.Module):
     self.blocks = nn.ModuleList([nn.ModuleList(block) for block in self.blocks])
     # Linear output layer. The output dimension is typically 1, but may be
     # larger if we're e.g. turning this into a VAE with an inference output
-    self.linear = self.which_linear(self.arch['out_channels'][-1], output_dim)
+    #self.linear = self.which_linear(self.arch['out_channels'][-1], output_dim)
     # Embedding for projection discrimination
-    self.embed = self.which_embedding(self.n_classes, self.arch['out_channels'][-1])
+    
+    self.global_average_pooling = True
+    self.projection_discriminator = False
+    if self.projection_discriminator:
+      self.aux_net(self.arch['out_channels'][-1], output_dim, bias=False)
+      self.embed = self.which_embedding(self.n_classes, self.arch['out_channels'][-1] * output_dim)
+    elif self.global_average_pooling:
+      self.linear = self.which_linear(self.arch['out_channels'][-1], output_dim)
+    else:
+      # for CIFAR kernel_size is 8
+      self.aux_net = self.which_conv(self.arch['out_channels'][-1], output_dim, kernel_size=8, stride=1, padding=0, bias=False)
 
     # Initialize weights
     if not skip_init:
@@ -415,22 +426,32 @@ class Discriminator(nn.Module):
         self.param_count += sum([p.data.nelement() for p in module.parameters()])
     print('Param count for D''s initialized parameters: %d' % self.param_count)
 
-  def forward(self, x, y=None):
+  def forward(self, x, y=None, feat=False):
     # Stick x into h for cleaner for loops without flow control
     h = x
     # Loop over blocks
     for index, blocklist in enumerate(self.blocks):
       for block in blocklist:
         h = block(h)
-    # Apply global sum pooling as in SN-GAN
-    h = torch.sum(self.activation(h), [2, 3])
-    # Get initial class-unconditional output
-    out = self.linear(h)
-    # Get projection of final featureset onto class vectors and add to evidence
-    if (y is not None) and (not self.ignore_projection_discriminator):
-      out = out + torch.sum(self.embed(y) * h, 1, keepdim=True)
     
+    #instead
+    if self.projection_discriminator:
+      h = torch.sum(self.activation(h), [2, 3], keepdim=True)
+      h = h.squeeze(-1)
+      projection = h * self.embed(y).view(-1, self.arch['out_channels'][-1], self.n_classes+1)
+      projection = torch.sum(projection, dim=1)
+      h = h.squeeze(-1)
+      out = self.aux_net(h) + h
+    elif feat:
+      return torch.sum(self.activation(h), [2, 3])
+    elif self.global_average_pooling:
+      h = torch.sum(self.activation(h), [2, 3])
+      out = self.linear(h)
+    else:
+      out = self.aux_net(self.activation(h)).squeeze()
+      
     return out
+
 
 # Parallelized G_D to minimize cross-gpu communication
 # Without this, Generator outputs would get all-gathered and then rebroadcast.
@@ -441,7 +462,7 @@ class G_D(nn.Module):
     self.D = D
 
   def forward(self, z, gy, x=None, dy=None, train_G=False, return_G_z=False,
-              split_D=False):              
+              split_D=False, feat=False):              
     # If training G, enable grad tape
     with torch.set_grad_enabled(train_G):
       # Get Generator output given noise
@@ -454,9 +475,9 @@ class G_D(nn.Module):
     # Split_D means to run D once with real data and once with fake,
     # rather than concatenating along the batch dimension.
     if split_D:
-      D_fake = self.D(G_z, gy)
+      D_fake = self.D(G_z, gy, feat=feat)
       if x is not None:
-        D_real = self.D(x, dy)
+        D_real = self.D(x, dy, feat=feat)
         return D_fake, D_real
       else:
         if return_G_z:
@@ -469,7 +490,7 @@ class G_D(nn.Module):
       D_input = torch.cat([G_z, x], 0) if x is not None else G_z
       D_class = torch.cat([gy, dy], 0) if dy is not None else gy
       # Get Discriminator output
-      D_out = self.D(D_input, D_class)
+      D_out = self.D(D_input, D_class, feat=feat)
       if x is not None:
         return torch.split(D_out, [G_z.shape[0], x.shape[0]]) # D_fake, D_real
       else:
