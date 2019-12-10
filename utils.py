@@ -475,6 +475,7 @@ dset_dict = {'I32': dset.ImageFolder, 'I64': dset.ImageFolder,
              'I128_hdf5': dset.ILSVRC_HDF5, 'I256_hdf5': dset.ILSVRC_HDF5,
              'C10': dset.CIFAR10, 'C100': dset.CIFAR100,
             'STL64': dset.STL10, 'STL32': dset.STL10, 'STL48': dset.STL10, 'STL96': dset.STL10,
+            'P64': dset.ImageFolderPlaces205, 'P128': dset.ImageFolderPlaces205,
 }
 imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'I64': 64, 'I64_hdf5': 64,
@@ -482,6 +483,7 @@ imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'I128': 128, 'I128_hdf5': 128,
                'I256': 256, 'I256_hdf5': 256,
                'C10': 32, 'C100': 32, 'STL64': 64, 'STL32': 32, 'STL48': 48, 'STL96': 96,
+               'P64': 64, 'P128': 128
 }
 root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
              'I64': 'train', 'I64_hdf5': 'ILSVRC64.hdf5',
@@ -489,6 +491,7 @@ root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
              'I128': 'train', 'I128_hdf5': 'ILSVRC128.hdf5',
              'I256': 'ImageNet', 'I256_hdf5': 'ILSVRC256.hdf5',
              'C10': 'cifar', 'C100': 'cifar', 'STL64': 'stl10', 'STL32': 'stl10', 'STL48': 'stl10', 'STL96': 'stl10',
+             'P64': '', 'P128': ''
 }
 nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
                'I64': 1000, 'I64_hdf5': 1000,
@@ -496,6 +499,7 @@ nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
                'I128': 1000, 'I128_hdf5': 1000,
                'I256': 1000, 'I256_hdf5': 1000,
                'C10': 10, 'C100': 100, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
+               'P64': 205, 'P64': 205
 }
 # Number of classes to put per sample sheet               
 classes_per_sheet_dict = {'I32': 50, 'I32_hdf5': 50,
@@ -504,6 +508,7 @@ classes_per_sheet_dict = {'I32': 50, 'I32_hdf5': 50,
                           'I128': 20, 'I128_hdf5': 20,
                           'I256': 20, 'I256_hdf5': 20,
                           'C10': 10, 'C100': 25, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
+                          'P64': 40, 'P128': 40
 }
 activation_dict = {'inplace_relu': nn.ReLU(inplace=True),
                    'relu': nn.ReLU(inplace=False),

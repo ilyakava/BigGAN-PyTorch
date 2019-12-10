@@ -39,6 +39,17 @@ def find_classes(dir):
     class_to_idx = {classes[i]: i for i in range(len(classes))}
     return classes, class_to_idx
     
+def find_classes_places205(dir):
+    class_groups = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
+    classes = []
+    for g in class_groups:
+      group_classes = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
+      classes += group_classes
+    classes.sort()
+    class_to_idx = {classes[i]: i for i in range(len(classes))}
+    return classes, class_to_idx
+
+
 def make_dataset(dir, class_to_idx):
   images = []
   dir = os.path.expanduser(dir)
@@ -177,6 +188,66 @@ class ImageFolder(data.Dataset):
     fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
     return fmt_str
         
+class ImageFolderPlaces205(ImageFolder):
+  """
+  Places205 comes with a csv with a path to an image and its class idx.
+  Directory structure has classes grouped alphabetically also.
+  """
+  
+  def __init__(self, root, transform=None, target_transform=None,
+               loader=default_loader, load_in_mem=False, 
+               index_filename='train_places205.csv', **kwargs):
+    
+    self.data_dir = 'data/vision/torralba/deeplearning/images256'
+    self.class_to_idx = {}
+    # Load pre-computed image directory walk
+    index_filepath = os.path.join(root, 'trainvalsplit_places205/train_places205.csv')
+    if os.path.exists(index_filepath):
+      print('Loading Provided Index file %s...' % index_filepath)
+      with open(index_filepath) as csvfile:
+        self.imgs = list(csv.reader(csvfile, delimiter=' '))
+    
+        if len(self.imgs) == 0:
+          raise(RuntimeError("EMPTY of %s." % index_filepath))
+        
+        for path, target in self.imgs:
+          target_name = os.path.split(os.path.split(path)[0])[1]
+          
+          if target_name not in self.class_to_idx:
+            self.class_to_idx[target_name] = int(target)
+        self.classes = sorted(self.class_to_idx.keys(), key=lambda k: self.class_to_idx[k])
+    else:
+      raise(RuntimeError("Read FAIL of %s." % index_filepath))
+
+    self.root = root
+    self.transform = transform
+    self.target_transform = target_transform
+    self.loader = loader
+    self.load_in_mem = False
+    
+    
+  def __getitem__(self, index):
+    """
+    Args:
+        index (int): Index
+
+    Returns:
+        tuple: (image, target) where target is class_index of the target class.
+    """
+   
+    path, target = self.imgs[index]
+    full_path = os.path.join(self.root, self.data_dir, path)
+    img = self.loader(str(full_path))
+    if self.transform is not None:
+      img = self.transform(img)
+    
+    if self.target_transform is not None:
+      target = self.target_transform(target)
+    
+    # print(img.size(), target)
+    return img, int(target)
+
+
 ''' ILSVRC_HDF5: A dataset to support I/O from an HDF5 to avoid
     having to load individual images all the time. '''
 import h5py as h5
