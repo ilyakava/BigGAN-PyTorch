@@ -6,6 +6,18 @@ This is the implementation for the multi-hinge loss of [this paper](https://arxi
 
 CIFAR10 best IS & FID are 9.58 & 6.40, CIFAR100 best IS & FID are 14.36 & 13.32, and STL10 best IS & FID are 12.16 & 17.44.
 
+## Installation
+
+### Tested on
+
+Python 3.7.3, pytorch '1.0.1.post2', tensorflow '1.13.1', cuda 10.0.130, cudnn 7.5.0, on rhel linux 7.7 (Maipo).
+
+Also tested on [this docker image](https://hub.docker.com/r/vastai/pytorch).
+
+### Additional packages
+
+`pip install scipy h5py tqdm`
+
 ## Running
 
 ### CIFAR100
