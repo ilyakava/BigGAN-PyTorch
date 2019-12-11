@@ -123,7 +123,14 @@ to `--get_train_error` or `--get_test_error` or `--get_self_error` or `--get_gen
 For `--get_generator_error` adjust your paths in `sample.py` to one of the pretrained models. Or add your own.
 See [here](https://arxiv.org/abs/1912.04216) for exmplanations of these metrics.
 
-Links to training code coming 12/11/19...
+#### Training classification networks:
+
+- [Cifar10/100](https://github.com/ilyakava/pytorch-cifar)
+- [STL](https://github.com/ilyakava/MixMatch-pytorch)
+
+## Links to pretrained models
+
+Coming 12/12/19...
 
 ## Attribution
 
