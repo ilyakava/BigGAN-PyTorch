@@ -130,7 +130,7 @@ See [here](https://arxiv.org/abs/1912.04216) for exmplanations of these metrics.
 
 ## Links to pretrained models
 
-Coming 12/12/19...
+[Google Drive](bit.ly/MHingeGAN_models)
 
 ## Attribution
 
