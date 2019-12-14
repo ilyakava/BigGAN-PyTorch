@@ -1,6 +1,6 @@
 # Code for a Multi-Hinge Loss with Conditional GANs
 
-This is the implementation for the multi-hinge loss of [this paper](https://arxiv.org/abs/1912.04216). Forked from: https://github.com/ajbrock/BigGAN-PyTorch
+This is the implementation for the multi-hinge loss of [this paper](http://bit.ly/MHingeGAN). Forked from: https://github.com/ajbrock/BigGAN-PyTorch
 
 ## Summary
 
@@ -121,7 +121,7 @@ In `scripts/final/sample*.py` change:
 
 to `--get_train_error` or `--get_test_error` or `--get_self_error` or `--get_generator_error`.
 For `--get_generator_error` adjust your paths in `sample.py` to one of the pretrained models. Or add your own.
-See [here](https://arxiv.org/abs/1912.04216) for exmplanations of these metrics.
+See [here](http://bit.ly/MHingeGAN) for explanations of these metrics.
 
 #### Training classification networks:
 
