@@ -16,11 +16,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.nn import Parameter as P
 import torchvision
+from train_fns import get_n_correct_from_D, get_error_on_dataset, get_self_error
 
 # Import my stuff
 import inception_utils
 import utils
 import losses
+
 
 import inception as iscore
 import fid
@@ -76,30 +78,7 @@ def run(config):
       disc_config['output_dim'] = disc_config['n_classes'] + 1
     D = model.Discriminator(**disc_config).to(device)
     
-    def get_n_correct_from_D(x, y):
-      """Gets the "classifications" from D.
-      
-      y: the correct labels
-      
-      In the case of projection discrimination we have to pass in all the labels
-      as conditionings to get the class specific affinity.
-      """
-      x = x.to(device)
-      if config['model'] == 'BigGAN': # projection discrimination case
-        if not config['get_self_error']:
-          y = y.to(device)
-        yhat = D(x,y)
-        for i in range(1,config['n_classes']):
-          yhat_ = D(x,((y+i) % config['n_classes']))
-          yhat = torch.cat([yhat,yhat_],1)
-        preds_ = yhat.data.max(1)[1].cpu()
-        return preds_.eq(0).cpu().sum()
-      else: # the mh gan case
-        if not config['get_self_error']:
-          y = y.to(device)
-        yhat = D(x)
-        preds_ = yhat[:,:config['n_classes']].data.max(1)[1]
-        return preds_.eq(y.data).cpu().sum()
+    
   
   # Load weights
   print('Loading weights...')
@@ -144,22 +123,8 @@ def run(config):
     acc_type = 'Test' if config['get_test_error'] else 'Train'
     
     
-    pbar = tqdm(loaders[0])
-    loader_total = len(loaders[0]) * config['batch_size']
-    sample_todo = min(config['sample_num_error'],loader_total)
-    print('Getting %s error accross %i examples' % (acc_type,sample_todo))
-    correct = 0
-    total = 0
+    accuracy = get_error_on_dataset(D, loaders[0], config, device)
     
-    with torch.no_grad():
-      for i, (x, y) in enumerate(pbar):
-        correct += get_n_correct_from_D(x,y)
-        total += config['batch_size']
-        if loader_total > total and total >= config['sample_num_error']:
-          print('Quitting early...')
-          break
-
-    accuracy = float(correct) / float(total) 
     hist = load_or_make_hist(hist_dir)
     hist[state_dict['itr']][acc_type] = accuracy
     np.save(os.path.join(hist_dir, HIST_FNAME), hist)
@@ -167,16 +132,7 @@ def run(config):
     print('[%s][%06d] %s accuracy: %f.' % (brief_expt_name, state_dict['itr'], acc_type, accuracy * 100))
 
   if config['get_self_error']:
-    n_used_imgs = config['sample_num_error']
-    correct = 0
-    imageSize = config['resolution']
-    x = np.empty((n_used_imgs,imageSize,imageSize,3), dtype=np.uint8)
-    for l in  tqdm(range(n_used_imgs // G_batch_size), desc='Generating [%s][%06d]' % (brief_expt_name, state_dict['itr'])):
-      with torch.no_grad():
-        images, y = sample()
-        correct += get_n_correct_from_D(images,y)
-        
-    accuracy = float(correct) / float(n_used_imgs) 
+    accuracy = get_self_error(D, sample, G_batch_size, config, device)
     print('[%s][%06d] %s accuracy: %f.' % (brief_expt_name, state_dict['itr'], 'Self', accuracy * 100))
     hist = load_or_make_hist(hist_dir)
     hist[state_dict['itr']]['Self'] = accuracy
@@ -200,8 +156,8 @@ def run(config):
       from torchvision import transforms
       compnet = DenseNet121(num_classes=100)
       compnet = torch.nn.DataParallel(compnet)
-      checkpoint = torch.load(os.path.join('/scratch0/ilya/locDoc/classifiers/cifar100/densenet121','ckpt.copy.t7'))
-      #checkpoint = torch.load(os.path.join('/fs/vulcan-scratch/ilyak/locDoc/experiments/classifiers/cifar100/densenet121','ckpt.copy.t7'))
+      #checkpoint = torch.load(os.path.join('/scratch0/ilya/locDoc/classifiers/cifar100/densenet121','ckpt.copy.t7'))
+      checkpoint = torch.load(os.path.join('/fs/vulcan-scratch/ilyak/locDoc/experiments/classifiers/cifar100/densenet121','ckpt.copy.t7'))
       compnet.load_state_dict(checkpoint['net'])
       compnet = compnet.to(device)
       compnet.eval();

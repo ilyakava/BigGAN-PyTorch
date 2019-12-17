@@ -10,6 +10,7 @@ import utils
 import losses
 
 import numpy as np
+from tqdm import tqdm, trange
 
 # Dummy training function for debugging
 def dummy_training_function():
@@ -315,7 +316,78 @@ def test(G, D, G_ema, z_, y_, state_dict, config, sample, get_inception_metrics,
   test_log.log(itr=int(state_dict['itr']), IS_mean=float(IS_mean),
                IS_std=float(IS_std), FID=float(FID))
                
-def classify(G, D, G_ema, z_, y_, state_dict, config, sample, get_inception_metrics,
+def get_n_correct_from_D(D, x, y, config, device='cuda'):
+      """Gets the "classifications" from D.
+      
+      x: images, already on device.
+      y: the correct labels, already on device.
+      
+      @returns
+      int: numer of correct classifications in x/y
+      
+      
+      In the case of projection discrimination we have to pass in all the labels
+      as conditionings to get the class specific affinity.
+      """
+
+      if config['model'] == 'BigGAN': # projection discrimination case
+        yhat = D(x,y)
+        for i in range(1,config['n_classes']):
+          yhat_ = D(x,((y+i) % config['n_classes']))
+          yhat = torch.cat([yhat,yhat_],1)
+        preds_ = yhat.data.max(1)[1].cpu()
+        return preds_.eq(0).cpu().sum()
+      else: # the mh gan case
+        yhat = D(x)
+        preds_ = yhat[:,:config['n_classes']].data.max(1)[1]
+        return preds_.eq(y.data).cpu().sum()
+
+def get_error_on_dataset(D, loader, config, device):
+  """Gets the train/test error.
+  
+  loader: Either the train or test loader from utils.get_data_loaders
+  """
+  loader_total = len(loader) * config['batch_size']
+  sample_todo = min(config['sample_num_error'], loader_total)
+  pbar = tqdm(loader,
+    total=int(np.ceil(sample_todo / float(config['batch_size']))),
+    desc='Getting error'
+  )
+  correct = 0
+  total = 0
+  
+  with torch.no_grad():
+    for i, (x, y) in enumerate(pbar):
+      if loader_total > total and total >= sample_todo:
+        break
+      x = x.to(device)
+      y = y.to(device)
+      correct += get_n_correct_from_D(D, x, y, config, device)
+      total += config['batch_size']
+
+  accuracy = float(correct) / float(total) 
+  return accuracy
+
+def get_self_error(D, sample, G_batch_size, config, device):
+  n_used_imgs = config['sample_num_error']
+  correct = 0
+  imageSize = config['resolution']
+  x = np.empty((n_used_imgs,imageSize,imageSize,3), dtype=np.uint8)
+  for l in tqdm(range(n_used_imgs // G_batch_size), desc='Generating'):
+    with torch.no_grad():
+      images, y = sample()
+      images = images.to(device)
+      correct += get_n_correct_from_D(D, images, y, config, device)
+      
+  accuracy = float(correct) / float(G_batch_size * (n_used_imgs // G_batch_size))
+  return accuracy
+  
+
+def errors(G, D, G_ema, z_, y_, state_dict, config, sample, get_inception_metrics,
          experiment_name, test_log):
-  # TODO     
+  """Gets and logs Self+Test error.
+  """
+  # get test error
+  # get self error
+  # log
   pass
