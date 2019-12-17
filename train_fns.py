@@ -383,11 +383,13 @@ def get_self_error(D, sample, G_batch_size, config, device):
   return accuracy
   
 
-def errors(G, D, G_ema, z_, y_, state_dict, config, sample, get_inception_metrics,
-         experiment_name, test_log):
+def test_errors(D, test_loader, state_dict, sample, G_batch_size, config, device, test_log):
   """Gets and logs Self+Test error.
+  
+  Meant to be called during training.
   """
-  # get test error
-  # get self error
-  # log
-  pass
+  test_accuracy = get_error_on_dataset(D, test_loader, config, device)
+  self_accuracy = get_self_error(D, sample, G_batch_size, config, device)
+  # Log results to file
+  test_log.log(itr=int(state_dict['itr']), test_accuracy=float(test_accuracy),
+               self_accuracy=float(self_accuracy))

@@ -56,6 +56,10 @@ def prepare_parser():
   parser.add_argument(
     '--use_multiepoch_sampler', action='store_true', default=False,
     help='Use the multi-epoch sampler for dataloader? (default: %(default)s)')
+  parser.add_argument(
+    '--sample_num_error', type=int, default=10000,
+    help='Number of images to sample when measuring train/test/self/generator error '
+         '(default: %(default)s)')
   
   
   ### Model stuff ###
@@ -461,10 +465,6 @@ def add_sample_parser(parser):
   parser.add_argument(
     '--get_generator_error', action='store_true', default=False,
     help='Use an auxiliary pre-trained classifier network to classify the generated images from the model and record accuracy with the conditional y as the ground truth. (default: %(default)s)')
-  parser.add_argument(
-    '--sample_num_error', type=int, default=10000,
-    help='Number of images to sample when sampling train/test/self/generator error '
-         '(default: %(default)s)')
   return parser
 
 # Convenience dicts

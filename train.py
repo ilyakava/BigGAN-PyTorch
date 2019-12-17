@@ -29,6 +29,8 @@ import losses
 import train_fns
 from sync_batchnorm import patch_replication_callback
 
+import pdb
+
 # The main training file. Config is a dictionary specifying the configuration
 # of this training run.
 def run(config):
@@ -142,7 +144,9 @@ def run(config):
 
   # Prepare inception metrics: FID and IS
   if config['test_every'] > 0:
-    get_inception_metrics = inception_utils.prepare_inception_metrics(config['dataset'], config['parallel'], config['no_fid'])
+    #get_inception_metrics = inception_utils.prepare_inception_metrics(config['dataset'], config['parallel'], config['no_fid'])
+    test_set_loader = utils.get_data_loaders(**{**config, 'batch_size': config['batch_size'],
+                                      'start_itr': state_dict['itr'], 'use_test_set': True})[0]
 
   # Prepare noise and randomly sampled label arrays
   # Allow for different batch sizes in G
@@ -241,15 +245,12 @@ def run(config):
                      ('%06d' % state_dict['itr']),
                      G_ema if config['ema'] else None)
 
-      # Test every specified interval, skip the zeroth
-      if (config['test_every'] > 0) and (not ((state_dict['itr']+1) % config['test_every'])):
+      # Test every specified interval
+      if (config['test_every'] > 0) and (not ((state_dict['itr']) % config['test_every'])):
         if config['G_eval_mode']:
           print('Switchin G to eval mode...')
           G.eval()
-        train_fns.test(G, D, G_ema, z_, y_, state_dict, config, sample,
-                       get_inception_metrics, experiment_name, test_log)
-                       
-      # TODO: classifications live
+        train_fns.test_errors(D, test_set_loader, state_dict, sample, G_batch_size, config, device, test_log)
     state_dict['epoch'] += 1
 
 

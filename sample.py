@@ -16,7 +16,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.nn import Parameter as P
 import torchvision
-from train_fns import get_n_correct_from_D, get_error_on_dataset, get_self_error
+from train_fns import get_error_on_dataset, get_self_error
 
 # Import my stuff
 import inception_utils
