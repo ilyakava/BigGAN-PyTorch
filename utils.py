@@ -469,46 +469,56 @@ def add_sample_parser(parser):
 
 # Convenience dicts
 dset_dict = {'I32': dset.ImageFolder, 'I64': dset.ImageFolder,
-             'TI64': dset.ImageFolder,'TI64_hdf5': dset.ILSVRC_HDF5, 
+             'TI64': dset.ImageFolderTinyImagenet,'TI64_hdf5': dset.ILSVRC_HDF5,
+             'TI128': dset.ImageFolderTinyImagenet,'TI128_hdf5': dset.ILSVRC_HDF5, 
              'I128': dset.ImageFolder, 'I256': dset.ImageFolder,
              'I32_hdf5': dset.ILSVRC_HDF5, 'I64_hdf5': dset.ILSVRC_HDF5, 
              'I128_hdf5': dset.ILSVRC_HDF5, 'I256_hdf5': dset.ILSVRC_HDF5,
              'C10': dset.CIFAR10, 'C100': dset.CIFAR100,
             'STL64': dset.STL10, 'STL32': dset.STL10, 'STL48': dset.STL10, 'STL96': dset.STL10,
             'P64': dset.ImageFolderPlaces205, 'P128': dset.ImageFolderPlaces205,
+            'TIH128': dset.ImageFolderTinyImagenet, 'TIH128_hdf5': dset.ILSVRC_HDF5
 }
 imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'I64': 64, 'I64_hdf5': 64,
                'TI64': 64, 'TI64_hdf5': 64,
+               'TI128': 128, 'TI128_hdf5': 128,
                'I128': 128, 'I128_hdf5': 128,
                'I256': 256, 'I256_hdf5': 256,
                'C10': 32, 'C100': 32, 'STL64': 64, 'STL32': 32, 'STL48': 48, 'STL96': 96,
-               'P64': 64, 'P128': 128
+               'P64': 64, 'P128': 128,
+               'TIH128': 128, 'TIH128_hdf5': 128
 }
 root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
              'I64': 'train', 'I64_hdf5': 'ILSVRC64.hdf5',
-             'TI64': 'train', 'TI64_hdf5': 'TILSVRC64.hdf5',
+             'TI64': 'train', 'TI64_hdf5': 'TI64.hdf5',
+             'TI128': 'train', 'TI128_hdf5': 'TI128.hdf5',
              'I128': 'train', 'I128_hdf5': 'ILSVRC128.hdf5',
              'I256': 'ImageNet', 'I256_hdf5': 'ILSVRC256.hdf5',
              'C10': 'cifar', 'C100': 'cifar', 'STL64': 'stl10', 'STL32': 'stl10', 'STL48': 'stl10', 'STL96': 'stl10',
-             'P64': '', 'P128': ''
+             'P64': '', 'P128': '',
+             'TIH128': 'train', 'TIH128_hdf5': 'TIH128.hdf5'
 }
 nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
                'I64': 1000, 'I64_hdf5': 1000,
                'TI64': 200, 'TI64_hdf5': 200,
+               'TI128': 200, 'TI128_hdf5': 200,
                'I128': 1000, 'I128_hdf5': 1000,
                'I256': 1000, 'I256_hdf5': 1000,
                'C10': 10, 'C100': 100, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
-               'P64': 205, 'P64': 205
+               'P64': 205, 'P64': 205,
+               'TIH128': 100, 'TIH128_hdf5': 100
 }
 # Number of classes to put per sample sheet               
 classes_per_sheet_dict = {'I32': 50, 'I32_hdf5': 50,
                           'I64': 50, 'I64_hdf5': 50,
                           'TI64': 50, 'TI64_hdf5': 50,
+                          'TI128': 50, 'TI128_hdf5': 50,
                           'I128': 20, 'I128_hdf5': 20,
                           'I256': 20, 'I256_hdf5': 20,
                           'C10': 10, 'C100': 25, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
-                          'P64': 40, 'P128': 40
+                          'P64': 40, 'P128': 40,
+                          'TIH128': 25, 'TIH128_hdf5': 25
 }
 activation_dict = {'inplace_relu': nn.ReLU(inplace=True),
                    'relu': nn.ReLU(inplace=False),
@@ -612,10 +622,7 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
                      use_test_set=False,
                      **kwargs):
 
-  # Append /FILENAME.hdf5 to root if using hdf5
-  data_root += '/%s' % root_dict[dataset]
-  print('Using dataset root location %s' % data_root)
-
+  root_dataset = root_dict[dataset]
   which_dataset = dset_dict[dataset]
   norm_mean = [0.5,0.5,0.5]
   norm_std = [0.5,0.5,0.5]
@@ -623,12 +630,27 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
   # For image folder datasets, name of the file where we store the precomputed
   # image locations to avoid having to walk the dirs every time we load.
   dataset_kwargs = {'index_filename': '%s_imgs.npz' % dataset}
+  if 'TIH' in dataset:
+    # when making the half tiny imagenet use the even half
+    dataset_kwargs['which_half'] = 0
   if use_test_set:
     if dataset in ['C10', 'C100']:
       dataset_kwargs['train'] = False
     if dataset in ['STL64', 'STL32', 'STL48']:
       dataset_kwargs['train'] = False
       dataset_kwargs['unlabeled'] = False
+    if dataset in ['TI64', 'TI128']:
+      root_dataset = 'val'
+    if dataset in ['TI64_hdf5']:
+      root_dataset = 'TI64.test.hdf5'
+    if dataset in ['TI128_hdf5']:
+      root_dataset = 'TI128.test.hdf5'
+      
+  
+  # Append /FILENAME.hdf5 to root if using hdf5
+  data_root += '/%s' % root_dataset
+  print('Using dataset root location %s' % data_root)
+      
   
   # HDF5 datasets have their own inbuilt transform, no need to train_transform  
   if 'hdf5' in dataset:
@@ -651,10 +673,11 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
                          transforms.Resize(image_size),
                          transforms.RandomHorizontalFlip()]
     else:
-      print('Data will not be augmented...')
       if dataset in ['C10', 'C100']:
+        print('Data will not be augmented...')
         train_transform = []
       else:
+        print('Data will be cropped on long edge and resized...')
         train_transform = [CenterCropLongEdge(), transforms.Resize(image_size)]
       # train_transform = [transforms.Resize(image_size), transforms.CenterCrop]
     train_transform = transforms.Compose(train_transform + [
