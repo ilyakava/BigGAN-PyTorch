@@ -31,9 +31,6 @@ def prepare_parser():
     '--write_dir', type=str, default='/fs/vulcan-scratch/ilyak/locDoc/data/imagenet/',
     help='Default location where data is written (default: %(default)s)')
   parser.add_argument(
-    '--write_name', type=str, default='STL10',
-    help='Default name for data that is written (default: %(default)s)')
-  parser.add_argument(
     '--batch_size', type=int, default=256,
     help='Default overall batchsize (default: %(default)s)')
   parser.add_argument(
@@ -45,6 +42,13 @@ def prepare_parser():
   parser.add_argument(
     '--compression', action='store_true', default=False,
     help='Use LZF compression? (default: %(default)s)')
+  parser.add_argument(
+    '--output_suffix', type=str, default='',
+    help='Appends before hdf5')
+  parser.add_argument(
+    '--use_test_set', action='store_true', default=False,
+    help='Use test set? (default: %(default)s)')
+    
   return parser
 
 
@@ -66,6 +70,7 @@ def run(config):
                                         shuffle=False,
                                         data_root=config['data_root'],
                                         use_multiepoch_sampler=False,
+                                        use_test_set=config['use_test_set'],
                                         **kwargs)[0]     
 
   # HDF5 supports chunking and compression. You may want to experiment 
@@ -87,7 +92,7 @@ def run(config):
     y = y.numpy()
     # If we're on the first batch, prepare the hdf5
     if i==0:
-      with h5.File(config['write_dir'] + '/%s%i.hdf5' % (config['write_name'], config['image_size']), 'w') as f:
+      with h5.File(config['write_dir'] + '/%s%s.hdf5' % (config['dataset'], config['output_suffix']), 'w') as f:
         print('Producing dataset of len %d' % len(train_loader.dataset))
         imgs_dset = f.create_dataset('imgs', x.shape,dtype='uint8', maxshape=(len(train_loader.dataset), 3, config['image_size'], config['image_size']),
                                      chunks=(config['chunk_size'], 3, config['image_size'], config['image_size']), compression=config['compression']) 
@@ -98,7 +103,7 @@ def run(config):
         labels_dset[...] = y
     # Else append to the hdf5
     else:
-      with h5.File(config['write_dir'] + '/%s%i.hdf5' % (config['write_name'], config['image_size']), 'a') as f:
+      with h5.File(config['write_dir'] + '/%s%s.hdf5' % (config['dataset'], config['output_suffix']), 'a') as f:
         f['imgs'].resize(f['imgs'].shape[0] + x.shape[0], axis=0)
         f['imgs'][-x.shape[0]:] = x
         f['labels'].resize(f['labels'].shape[0] + y.shape[0], axis=0)
