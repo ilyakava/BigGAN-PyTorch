@@ -27,6 +27,7 @@ from torch.utils.data import DataLoader
 
 import datasets as dset
 
+
 def prepare_parser():
   usage = 'Parser for all scripts.'
   parser = ArgumentParser(description=usage)
@@ -477,7 +478,8 @@ dset_dict = {'I32': dset.ImageFolder, 'I64': dset.ImageFolder,
              'C10': dset.CIFAR10, 'C100': dset.CIFAR100,
             'STL64': dset.STL10, 'STL32': dset.STL10, 'STL48': dset.STL10, 'STL96': dset.STL10,
             'P64': dset.ImageFolderPlaces205, 'P128': dset.ImageFolderPlaces205,
-            'TIH128': dset.ImageFolderTinyImagenet, 'TIH128_hdf5': dset.ILSVRC_HDF5
+            'TIH128': dset.ImageFolderTinyImagenet, 'TIH128_hdf5': dset.ILSVRC_HDF5,
+            'TIH64': dset.ImageFolderTinyImagenet, 'TIH64_hdf5': dset.ILSVRC_HDF5
 }
 imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'I64': 64, 'I64_hdf5': 64,
@@ -487,7 +489,8 @@ imsize_dict = {'I32': 32, 'I32_hdf5': 32,
                'I256': 256, 'I256_hdf5': 256,
                'C10': 32, 'C100': 32, 'STL64': 64, 'STL32': 32, 'STL48': 48, 'STL96': 96,
                'P64': 64, 'P128': 128,
-               'TIH128': 128, 'TIH128_hdf5': 128
+               'TIH128': 128, 'TIH128_hdf5': 128,
+               'TIH64': 64, 'TIH64_hdf5': 64
 }
 root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
              'I64': 'train', 'I64_hdf5': 'ILSVRC64.hdf5',
@@ -497,8 +500,19 @@ root_dict = {'I32': 'ImageNet', 'I32_hdf5': 'ILSVRC32.hdf5',
              'I256': 'ImageNet', 'I256_hdf5': 'ILSVRC256.hdf5',
              'C10': 'cifar', 'C100': 'cifar', 'STL64': 'stl10', 'STL32': 'stl10', 'STL48': 'stl10', 'STL96': 'stl10',
              'P64': '', 'P128': '',
-             'TIH128': 'train', 'TIH128_hdf5': 'TIH128.hdf5'
+             'TIH128': 'train', 'TIH128_hdf5': 'TIH128.hdf5',
+             'TIH64': 'train', 'TIH64_hdf5': 'TIH64.hdf5'
 }
+# change to dataset path when using the test set
+root_test_dict = {
+  'TI64': 'val',
+  'TI128': 'val',
+  'TIH64': 'val',
+  'TI64_hdf5': 'TI64.test.hdf5',
+  'TIH64_hdf5': 'TIH64.test.hdf5',
+  'TI128_hdf5': 'TI128.test.hdf5'
+}
+
 nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
                'I64': 1000, 'I64_hdf5': 1000,
                'TI64': 200, 'TI64_hdf5': 200,
@@ -507,7 +521,8 @@ nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
                'I256': 1000, 'I256_hdf5': 1000,
                'C10': 10, 'C100': 100, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
                'P64': 205, 'P64': 205,
-               'TIH128': 100, 'TIH128_hdf5': 100
+               'TIH128': 100, 'TIH128_hdf5': 100,
+               'TIH64': 100, 'TIH64_hdf5': 100
 }
 # Number of classes to put per sample sheet               
 classes_per_sheet_dict = {'I32': 50, 'I32_hdf5': 50,
@@ -518,7 +533,8 @@ classes_per_sheet_dict = {'I32': 50, 'I32_hdf5': 50,
                           'I256': 20, 'I256_hdf5': 20,
                           'C10': 10, 'C100': 25, 'STL64': 10, 'STL32': 10, 'STL48': 10, 'STL96': 10,
                           'P64': 40, 'P128': 40,
-                          'TIH128': 25, 'TIH128_hdf5': 25
+                          'TIH128': 25, 'TIH128_hdf5': 25,
+                          'TIH64': 25, 'TIH64_hdf5': 25
 }
 activation_dict = {'inplace_relu': nn.ReLU(inplace=True),
                    'relu': nn.ReLU(inplace=False),
@@ -613,7 +629,6 @@ class MultiEpochSampler(torch.utils.data.Sampler):
   def __len__(self):
     return len(self.data_source) * self.num_epochs - self.start_itr * self.batch_size
 
-
 # Convenience function to centralize all data loaders
 def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64, 
                      num_workers=8, shuffle=True, load_in_mem=False, hdf5=False,
@@ -633,18 +648,22 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
   if 'TIH' in dataset:
     # when making the half tiny imagenet use the even half
     dataset_kwargs['which_half'] = 0
+  # check if which_dataset is ImageFolderTinyImagenet
+  # this should only be used from the parser, which should pass specific
+  # parameters like class_limit
+  if which_dataset == dset.ImageFolderTinyImagenet:
+    assert('class_limit' in kwargs)
+    dataset_kwargs['class_limit'] = kwargs['class_limit']
   if use_test_set:
     if dataset in ['C10', 'C100']:
       dataset_kwargs['train'] = False
-    if dataset in ['STL64', 'STL32', 'STL48']:
+    elif dataset in ['STL64', 'STL32', 'STL48']:
       dataset_kwargs['train'] = False
       dataset_kwargs['unlabeled'] = False
-    if dataset in ['TI64', 'TI128']:
-      root_dataset = 'val'
-    if dataset in ['TI64_hdf5']:
-      root_dataset = 'TI64.test.hdf5'
-    if dataset in ['TI128_hdf5']:
-      root_dataset = 'TI128.test.hdf5'
+    elif dataset in root_test_dict:
+      root_dataset = root_test_dict[dataset]
+    else:
+      raise ValueError("Asked to use unimplemented test set for %s" % dataset)
       
   
   # Append /FILENAME.hdf5 to root if using hdf5

@@ -198,7 +198,7 @@ class ImageFolderTinyImagenet(ImageFolder):
 
   def __init__(self, root, transform=None, target_transform=None,
                loader=default_loader, load_in_mem=False, 
-               index_filename='tiny_imagenet_imgs.npz', which_half=None, **kwargs):
+               index_filename='tiny_imagenet_imgs.npz', which_half=None, class_limit=None, **kwargs):
     """
     args:
       which_half: None = use all, 0 = use even half, 1 = use odd half (by index)
@@ -218,14 +218,14 @@ class ImageFolderTinyImagenet(ImageFolder):
       
     
     # Load pre-computed image directory walk
-    if os.path.exists(index_filename):
+    if False and os.path.exists(index_filename):
       print('Loading pre-saved Index file %s...' % index_filename)
       imgs = np.load(index_filename)['imgs']
     # If first time, walk the folder directory and save the 
     # results to a pre-computed file.
     else:
       print('Generating  Index file %s...' % index_filename)
-      imgs = ImageFolderTinyImagenet.make_dataset(root, class_to_idx)
+      imgs = ImageFolderTinyImagenet.make_dataset(root, class_to_idx, class_limit)
       np.savez_compressed(index_filename, **{'imgs' : imgs})
       
     msg = "Found %i images in subfolders of: %s \n" % (len(imgs), root)
@@ -252,7 +252,7 @@ class ImageFolderTinyImagenet(ImageFolder):
         self.labels.append(target)
   
   @staticmethod        
-  def make_dataset(dir, class_to_idx, limit=1e9):
+  def make_dataset(dir, class_to_idx, class_limit):
     """
     Only get the images within class_to_idx
     """
@@ -268,7 +268,7 @@ class ImageFolderTinyImagenet(ImageFolder):
         random.shuffle(sorted(fnames))
         count = 0
         for fname in fnames:
-          if is_image_file(fname) and count < limit:
+          if is_image_file(fname) and count < class_limit:
             count += 1
             path = os.path.join(root, fname)
             item = (path, i)
