@@ -250,7 +250,7 @@ def run(config):
         if config['G_eval_mode']:
           print('Switchin G to eval mode...')
           G.eval()
-        train_fns.test_errors(D, test_set_loader, state_dict, sample, G_batch_size, config, device, test_log)
+        train_fns.test_classification(D, loaders[0], test_set_loader, state_dict, sample, G_batch_size, config, device, test_log)
     state_dict['epoch'] += 1
 
 

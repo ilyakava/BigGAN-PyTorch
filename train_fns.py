@@ -383,13 +383,14 @@ def get_self_error(D, sample, G_batch_size, config, device):
   return accuracy
   
 
-def test_errors(D, test_loader, state_dict, sample, G_batch_size, config, device, test_log):
-  """Gets and logs Self+Test error.
+def test_classification(D, train_loader, test_loader, state_dict, sample, G_batch_size, config, device, test_log):
+  """Gets and logs Classification errors.
   
   Meant to be called during training.
   """
+  train_accuracy = get_error_on_dataset(D, train_loader, config, device)
   test_accuracy = get_error_on_dataset(D, test_loader, config, device)
   self_accuracy = get_self_error(D, sample, G_batch_size, config, device)
   # Log results to file
-  test_log.log(itr=int(state_dict['itr']), test_accuracy=float(test_accuracy),
+  test_log.log(itr=int(state_dict['itr']), train_accuracy=float(train_accuracy), test_accuracy=float(test_accuracy),
                self_accuracy=float(self_accuracy))
