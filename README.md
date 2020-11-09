@@ -130,7 +130,7 @@ See [here](http://bit.ly/MHingeGAN) for explanations of these metrics.
 
 ## Links to pretrained models
 
-[Google Drive](bit.ly/MHingeGAN_models)
+[Google Drive](https://bit.ly/35ehl0Q)
 
 ## Attribution
 
