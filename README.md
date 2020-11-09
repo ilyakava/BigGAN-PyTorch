@@ -2,6 +2,17 @@
 
 This is the implementation for the multi-hinge loss of [this paper](http://bit.ly/MHingeGAN). Forked from: https://github.com/ajbrock/BigGAN-PyTorch
 
+Please cite:
+```
+@InProceedings{Kavalerov_2021_WACV,
+author = {Kavalerov, Ilya and Czaja, Wojciech and Chellappa, Rama},
+title = {A Multi-Class Hinge Loss for Conditional GANs},
+booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+month = {January},
+year = {2021}
+}
+```
+
 ## Summary
 
 CIFAR10 best IS & FID are 9.58 & 6.40, CIFAR100 best IS & FID are 14.36 & 13.32, and STL10 best IS & FID are 12.16 & 17.44.
