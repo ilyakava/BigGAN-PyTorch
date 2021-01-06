@@ -1,15 +1,16 @@
 # Code for a Multi-Hinge Loss with Conditional GANs
 
-This is the implementation for the multi-hinge loss of [this paper](http://bit.ly/MHingeGAN). Forked from: https://github.com/ajbrock/BigGAN-PyTorch
+This is the implementation for the multi-hinge loss of [this paper](https://openreview.net/pdf?id=kBk6w-oJ9jq) for K+1 GANs. For the main MultiHingeGAN repository please see:https://github.com/ilyakava/gan
+
+This repository is forked from: https://github.com/ajbrock/BigGAN-PyTorch
 
 Please cite:
 ```
-@InProceedings{Kavalerov_2021_WACV,
-author = {Kavalerov, Ilya and Czaja, Wojciech and Chellappa, Rama},
-title = {A Multi-Class Hinge Loss for Conditional GANs},
-booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
-month = {January},
-year = {2021}
+@inproceedings{kavalerov2020study,
+  title={A study of quality and diversity in K+ 1 GANs},
+  author={Kavalerov, Ilya and Czaja, Wojciech and Chellappa, Rama},
+  booktitle={''I Can't Believe It's Not Better!''NeurIPS 2020 workshop},
+  year={2020}
 }
 ```
 
