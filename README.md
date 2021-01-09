@@ -1,4 +1,4 @@
-# Code for a Multi-Hinge Loss with Conditional GANs
+# Code for a Multi-Hinge Loss with K+1 GANs
 
 This is the implementation for the multi-hinge loss of [this paper](https://openreview.net/pdf?id=kBk6w-oJ9jq) for K+1 GANs. For the main MultiHingeGAN repository please see:https://github.com/ilyakava/gan
 
