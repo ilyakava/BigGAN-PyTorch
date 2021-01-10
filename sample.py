@@ -261,7 +261,20 @@ def run(config):
   
   if config['official_IS']:
     if (not ('IS' in hist[state_dict['itr']])) or config['overwrite']:
-      mis, sis = iscore.get_inception_score(x)
+      try:
+        mis, sis = iscore.get_inception_score(x)
+      except Exception as inst:
+        print('Inception Score Failed.')
+        if "Failed to get convolution algorithm" in inst.message:
+          print(inst)
+          print('\n')
+          print('-X' * 40)
+          print("\nIT IS LIKELY THAT TENSORFLOW RAN OUT OF MEMORY.")
+          print("Try using a smaller batch size.\n")
+          print('-X' * 40)
+          print('\n')
+        else:
+          print(inst)
       print('[%s][%06d] IS mu: %f. IS sigma: %f.' % (brief_expt_name, state_dict['itr'], mis, sis))
       hist = load_or_make_hist(hist_dir)
       hist[state_dict['itr']]['IS'] = [mis, sis]

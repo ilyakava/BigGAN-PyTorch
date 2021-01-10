@@ -1,0 +1,23 @@
+#!/bin/bash
+CUDA_VISIBLE_DEVICES=0,1 python train.py \
+--shuffle --batch_size 50 --parallel \
+--num_G_accumulations 2 --num_D_accumulations 1 --num_epochs 200 \
+--num_D_steps 2 --G_lr 2e-4 --D_lr 2e-4 \
+--dataset C10 \
+--G_ortho 0.0 \
+--G_attn 0 --D_attn 0 \
+--G_init N02 --D_init N02 \
+--ema --use_ema --ema_start 1000 \
+--save_every 500 --num_best_copies 5 --num_save_copies 2 --seed 0 \
+--data_root /scratch0/ilya/locDoc/data/cifar10 \
+--weights_root /scratch0/ilya/locDoc/BigGAN/cifartest \
+--logs_root /scratch0/ilya/locDoc/BigGAN/cifartest \
+--samples_root /scratch0/ilya/locDoc/BigGAN/cifartest \
+--test_every 20000000 \
+--experiment_name mh_csc_loss_noconcat_gap_phase2_3 \
+--historical_save_every 1000 \
+--mh_csc_loss \
+--model=BigGANmh \
+--global_average_pooling \
+--load_weights 022500 \
+--resume

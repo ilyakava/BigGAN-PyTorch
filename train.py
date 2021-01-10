@@ -124,7 +124,7 @@ def run(config):
   test_metrics_fname = '%s/%s_log.jsonl' % (config['logs_root'],
                                             experiment_name)
   train_metrics_fname = '%s/%s' % (config['logs_root'], experiment_name)
-  print('Inception Metrics will be saved to {}'.format(test_metrics_fname))
+  print('Evaluation Metrics will be saved to {}'.format(test_metrics_fname))
   test_log = utils.MetricsLogger(test_metrics_fname, 
                                  reinitialize=(not config['resume']))
   print('Training Metrics will be saved to {}'.format(train_metrics_fname))

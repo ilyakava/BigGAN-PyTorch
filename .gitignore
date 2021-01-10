@@ -1,7 +1,7 @@
 .ipynb_checkpoints/*
-*.npz
+#*.npz
 __pycache__/*
 sync_batchnorm/__pycache__/*
 **/.ipynb_checkpoints/*
-scripts/*
+#scripts/*
 *.pyc

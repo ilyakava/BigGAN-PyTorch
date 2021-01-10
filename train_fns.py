@@ -12,6 +12,8 @@ import losses
 import numpy as np
 from tqdm import tqdm, trange
 
+import pdb
+
 # Dummy training function for debugging
 def dummy_training_function():
   def train(x, y):
@@ -95,6 +97,7 @@ def GAN_training_function(G, D, GD, z_, y_, ema, state_dict, config):
           D_feat_fake, D_feat_real = GD(z_, y_, x[-1], None, train_G=True, split_D=config['split_D'], feat=True)
           fm_loss = torch.mean(torch.abs(torch.mean(D_feat_fake, 0) - torch.mean(D_feat_real, 0)))
           oth_loss = losses.mh_loss(D_fake, y_[:config['batch_size']])
+          
           G_loss = (config['mh_fmloss_weight']*fm_loss + config['mh_loss_weight']*oth_loss) / float(config['num_G_accumulations'])
         else:
           G_loss = losses.generator_loss(D_fake) / float(config['num_G_accumulations'])
@@ -347,10 +350,11 @@ def get_error_on_dataset(D, loader, config, device):
   
   loader: Either the train or test loader from utils.get_data_loaders
   """
-  loader_total = len(loader) * config['batch_size']
+  loader_bs = loader.__getattribute__('batch_size')
+  loader_total = len(loader) * loader_bs
   sample_todo = min(config['sample_num_error'], loader_total)
   pbar = tqdm(loader,
-    total=int(np.ceil(sample_todo / float(config['batch_size']))),
+    total=int(np.ceil(sample_todo / float(loader_bs))),
     desc='Getting error'
   )
   correct = 0
@@ -363,7 +367,7 @@ def get_error_on_dataset(D, loader, config, device):
       x = x.to(device)
       y = y.to(device)
       correct += get_n_correct_from_D(D, x, y, config, device)
-      total += config['batch_size']
+      total += loader_bs
 
   accuracy = float(correct) / float(total) 
   return accuracy

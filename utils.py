@@ -27,7 +27,6 @@ from torch.utils.data import DataLoader
 
 import datasets as dset
 
-
 def prepare_parser():
   usage = 'Parser for all scripts.'
   parser = ArgumentParser(description=usage)
@@ -508,9 +507,11 @@ root_test_dict = {
   'TI64': 'val',
   'TI128': 'val',
   'TIH64': 'val',
+  'TIH128': 'val',
   'TI64_hdf5': 'TI64.test.hdf5',
   'TIH64_hdf5': 'TIH64.test.hdf5',
-  'TI128_hdf5': 'TI128.test.hdf5'
+  'TI128_hdf5': 'TI128.test.hdf5',
+  'TIH128_hdf5': 'TIH128.test.hdf5'
 }
 
 nclass_dict = {'I32': 1000, 'I32_hdf5': 1000,
@@ -657,7 +658,7 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
   if use_test_set:
     if dataset in ['C10', 'C100']:
       dataset_kwargs['train'] = False
-    elif dataset in ['STL64', 'STL32', 'STL48']:
+    elif dataset in ['STL96', 'STL64', 'STL32', 'STL48']:
       dataset_kwargs['train'] = False
       dataset_kwargs['unlabeled'] = False
     elif dataset in root_test_dict:
@@ -747,9 +748,10 @@ def get_data_loaders(dataset, data_root=None, augment=False, batch_size=64,
   
       def __len__(self):
           return len(self.raw_loader)
-        
+    
+    dataset_kwargs['train'] = False
     unl_set = which_dataset(root=data_root, transform=train_transform,
-                            load_in_mem=load_in_mem, train=False, **dataset_kwargs)
+                            load_in_mem=load_in_mem, **dataset_kwargs)
     unl_loader = MyLiteDataLoader(unl_set, batch_size)
     loaders.append(unl_loader)
     

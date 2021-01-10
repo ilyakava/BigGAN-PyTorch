@@ -34,9 +34,9 @@ discriminator_loss = loss_hinge_dis
 
 def crammer_singer_criterion(X, Ylabel):
   num_real_classes = X.shape[1] - 1
-  mask = torch.ones_like(X)
+  mask = torch.ones_like(X, dtype=torch.bool)
   mask.scatter_(1, Ylabel.unsqueeze(-1), 0)
-  wrongs = torch.masked_select(X,mask.byte()).reshape(X.shape[0], num_real_classes)
+  wrongs = torch.masked_select(X,mask.byte().bool()).reshape(X.shape[0], num_real_classes)
   max_wrong, _ = wrongs.max(1)
   max_wrong = max_wrong.unsqueeze(-1)
   target = X.gather(1,Ylabel.unsqueeze(-1))
@@ -44,9 +44,9 @@ def crammer_singer_criterion(X, Ylabel):
     
 def crammer_singer_complement_criterion(X, Ylabel):
   num_real_classes = X.shape[1] - 1
-  mask = torch.ones_like(X)
+  mask = torch.ones_like(X, dtype=torch.bool)
   mask.scatter_(1, Ylabel.unsqueeze(-1), 0)
-  wrongs = torch.masked_select(X,mask.byte()).reshape(X.shape[0], num_real_classes)
+  wrongs = torch.masked_select(X,mask.byte().bool()).reshape(X.shape[0], num_real_classes)
   max_wrong, _ = wrongs.max(1)
   max_wrong = max_wrong.unsqueeze(-1)
   target = X.gather(1,Ylabel.unsqueeze(-1))

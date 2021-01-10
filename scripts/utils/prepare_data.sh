@@ -30,3 +30,9 @@
 #python make_hdf5.py --dataset TIH64 --batch_size 256 --write_dir=/fs/vulcan-scratch/ilyak/locDoc/data/tiny-imagenet --class_limit 500
 
 #python make_hdf5.py --dataset TIH64 --batch_size 256 --write_dir=/fs/vulcan-scratch/ilyak/locDoc/data/tiny-imagenet --class_limit 100 --use_test_set --output_suffix .test
+
+#python make_hdf5.py --dataset TIH64 --batch_size 256 --write_dir=/fs/vulcan-scratch/ilyak/locDoc/data/tiny-imagenet --class_limit 1000000 --output_suffix .all
+
+python make_hdf5.py --dataset TIH128 --batch_size 256 --write_dir=/fs/vulcan-scratch/ilyak/locDoc/data/tiny-imagenet --class_limit 500
+
+#python make_hdf5.py --dataset TIH128 --batch_size 256 --write_dir=/fs/vulcan-scratch/ilyak/locDoc/data/tiny-imagenet --class_limit 100 --use_test_set --output_suffix .test
